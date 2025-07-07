@@ -1,0 +1,3 @@
+LUI is my local universal identifier I use to track samples. 
+It is also because the annotation step demands strict alphanumeric labels. 
+LUI = ACCESSIONScientificname

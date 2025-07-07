@@ -1,0 +1,9 @@
+
+data
+data/
+
+cpgavas2_*
+
+# pixi environments
+.pixi
+*.egg-info
