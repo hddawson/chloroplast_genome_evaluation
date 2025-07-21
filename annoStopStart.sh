@@ -25,53 +25,43 @@ process_file() {
   
   final_output_dir="$final_dir/${pid_name}"
   
-  # ⛔ Skip if output already exists and is non-empty
+  # ⛔ Skip if output already exists and is non-empty 
   if [[ -d "$final_output_dir" && -n "$(ls -A "$final_output_dir" 2>/dev/null)" ]]; then
-  echo "Skipping $base_name: output already exists and is non-empty."
-  return 0
+    echo "Skipping $base_name: output already exists."
+    return 0
   fi
-  
+
   echo "Processing $fasta_file..."
   
-  # Temporary working directory
-  temp_dir="${temp_base_dir}/dir_${pid_name}"
-  mkdir -p "$temp_dir"
+  # Create the final directory from the start
+  mkdir -p "$final_output_dir"
   
-  # Run the CLI tool in Singularity
+  # Run Singularity, binding the final directory and writing directly to it
   singularity exec \
     --containall \
     --writable-tmpfs \
-    --env TMPDIR="$temp_base_dir" \
-    --bind /workdir/hdd29/tmp:/tmp \
     --bind "$bind_dir:/mnt" \
+    --bind "$final_output_dir:/output" \
     "$singularity_image" run-cpgavas2 \
     -in "/mnt/$(basename "$fasta_file")" \
     -db 1 \
     -pid "$pid_name" \
-    -out "$temp_dir" \
-     > "$temp_dir/run.log" 2>&1
+    -out "/output" \
+     > "$final_output_dir/run.log" 2>&1
   
-  # Check if the process succeeded
+  # Check for success
   if [ $? -eq 0 ]; then
-    echo "Annotation for $base_name completed successfully."
+    echo "Annotation for $base_name completed in $final_output_dir."
   else
-    echo "Error annotating $base_name. Skipping."
-    rm -rf "$temp_dir"
+    echo "Error annotating $base_name. Log is in $final_output_dir."
+    # To start a failed run from scratch, you can uncomment the next line
+    # rm -rf "$final_output_dir" 
     return 1
   fi
-
-  # Copy results from temporary directory to final directory
-  final_output_dir="$final_dir/${pid_name}"
-  mkdir -p "$final_output_dir"
-  cp -r "$temp_dir"/* "$final_output_dir/"
-  echo "Copied results for $base_name to $final_output_dir."
-
-  # Clean up temporary working directory
-  rm -rf "$temp_dir"
 }
 
 export -f process_file
 export singularity_image bind_dir final_dir temp_base_dir TMPDIR # Export variables for subprocesses
 
 # Find all .fa files and process them in parallel with limited jobs
-find "$input_dir" -name "*.fa" | parallel --progress -j 88 process_file {}
+find "$input_dir" -name "*.fa" | parallel --progress -j 20 process_file {}
