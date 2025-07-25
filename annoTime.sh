@@ -1,6 +1,10 @@
 #!/bin/bash
 set -e
 
+mkdir -p /workdir/hdd29/tmp
+export TMPDIR=/workdir/hdd29/tmp
+export TMP=/workdir/hdd29/tmp
+
 # Set directories
 input_dir="/workdir/hdd29/theRefseqening/data/genomes"
 final_dir="/workdir/hdd29/theRefseqening/data/results"
@@ -37,7 +41,6 @@ process_file() {
     SECONDS=0
 
     singularity exec \
-      --containall \
       --writable-tmpfs \
       --bind "$bind_dir:/mnt" \
       --bind "$final_output_dir:/output" \
@@ -70,5 +73,6 @@ process_file() {
 export -f process_file
 export singularity_image bind_dir final_dir temp_base_dir TMPDIR
 
+parallel --number-of-cpus
 # Process in parallel
 find "$input_dir" -name "*.fa" | parallel --progress -j 20 process_file {}
