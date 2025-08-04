@@ -2,7 +2,7 @@
 data
 data/
 cpgavas2_*
-
+env_data/*
 # pixi environments
 .pixi
 *.egg-info
