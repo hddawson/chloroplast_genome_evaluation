@@ -6,15 +6,31 @@ export TMP_BASE_DIR="/workdir/hdd29/tmp"
 
 # Set directories
 input_dir="/workdir/hdd29/theRefseqening/data/genomes"
-final_dir="/workdir/hdd29/theRefseqening/data/results_good"
+final_dir="/workdir/hdd29/theRefseqening/data/results_good_80cores"
 singularity_image="cpgavas2_0.03.sif"
 bind_dir="$input_dir"
 
 mkdir -p "$final_dir"
 mkdir -p "$TMP_BASE_DIR"
 
-source ~/miniconda3/etc/profile.d/conda.sh
-conda activate singularity
+#source ~/miniconda3/etc/profile.d/conda.sh
+#conda activate singularity
+
+# Check if file list is provided
+if [ $# -eq 0 ]; then
+    echo "Usage: $0 <file_list>"
+    echo "  file_list: Path to a file containing basenames (one per line) to process"
+    echo "  Example: $0 data/smallFiles.txt"
+    exit 1
+fi
+
+file_list="$1"
+
+# Check if file list exists
+if [ ! -f "$file_list" ]; then
+    echo "Error: File list '$file_list' not found"
+    exit 1
+fi
 
 # Calculate max parallel jobs based on free space in /tmp (assume 10GB per job)
 available_kb=$(df --output=avail -k /workdir/hdd29/tmp | tail -1)
@@ -23,19 +39,26 @@ max_jobs=$(( max_jobs > 20 ? 20 : (max_jobs < 1 ? 1 : max_jobs) ))
 
 echo "Detected free space: $(( available_kb / 1024 / 1024 )) GB"
 echo "Setting max parallel jobs to: $max_jobs"
+echo "Processing files from list: $file_list"
 
 process_file() {
-  fasta_file="$1"
-  base_name=$(basename "$fasta_file" .fa)
-  pid_name=$(echo "$base_name" | tr -d '_.')
+  basename="$1"
+  fasta_file="$input_dir/${basename}.fa"
+  pid_name=$(echo "$basename" | tr -d '_.')
   final_output_dir="$final_dir/${pid_name}"
 
+  # Check if input file exists
+  if [ ! -f "$fasta_file" ]; then
+    echo "$(date '+%Y-%m-%d %H:%M:%S') [ERROR] $basename: Input file '$fasta_file' not found."
+    return 1
+  fi
+
   if [[ -d "$final_output_dir" && -n "$(ls -A "$final_output_dir" 2>/dev/null)" ]]; then
-    echo "$(date '+%Y-%m-%d %H:%M:%S') [SKIP] $base_name: output already exists."
+    echo "$(date '+%Y-%m-%d %H:%M:%S') [SKIP] $basename: output already exists."
     return 0
   fi
 
-  echo "$(date '+%Y-%m-%d %H:%M:%S') [START] $base_name"
+  echo "$(date '+%Y-%m-%d %H:%M:%S') [START] $basename"
   mkdir -p "$final_output_dir"
 
   # Create a unique per-job temp directory
@@ -55,7 +78,7 @@ process_file() {
     df -h "$TMPDIR"
     SECONDS=0
 
-    singularity exec \
+    /usr/bin/singularity exec \
       --bind "$job_tmp:/tmp" \
       --bind "$job_tmp:/mnt" \
       --bind "$final_output_dir:/output" \
@@ -72,10 +95,12 @@ process_file() {
     df -h "$TMPDIR"
 
     if [ $rc -eq 0 ]; then
-      echo "[DONE]  $base_name completed successfully."
+      echo "[DONE]  $basename completed successfully."
     else
-      echo "[FAIL]  $base_name failed."
+      echo "[FAIL]  $basename failed."
     fi
+
+    cp -r "$job_tmp"/* "$final_output_dir/"
 
     # Clean up tmp dir after run
     rm -rf "$job_tmp"
@@ -84,14 +109,15 @@ process_file() {
   } >> "$run_log" 2>&1
 
   if [ $? -eq 0 ]; then
-    echo "$(date '+%Y-%m-%d %H:%M:%S') [DONE] $base_name"
+    echo "$(date '+%Y-%m-%d %H:%M:%S') [DONE] $basename"
   else
-    echo "$(date '+%Y-%m-%d %H:%M:%S') [FAIL] $base_name — check $run_log"
+    echo "$(date '+%Y-%m-%d %H:%M:%S') [FAIL] $basename — check $run_log"
     return 1
   fi
 }
 
 export -f process_file
-export singularity_image bind_dir final_dir TMP_BASE_DIR
+export singularity_image bind_dir final_dir TMP_BASE_DIR input_dir
 
-find "$input_dir" -name "*.fa" | parallel --progress -j "$max_jobs" process_file {}
+# Read the file list and process each basename
+cat "$file_list" | parallel --progress -j 80 process_file {}
