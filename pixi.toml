@@ -24,6 +24,11 @@ r-sf = ">=1.0_20,<2"
 r-rgbif = ">=3.8.2,<4"
 r-rnaturalearth = ">=1.0.1,<2"
 r-bien = ">=1.2.7,<2"
+r-ncdf4 = ">=1.24,<2"
+r-plyr = ">=1.8.9,<2"
+r-reshape2 = ">=1.4.4,<2"
+r-tidyverse = ">=2.0.0,<3"
+libgdal-netcdf = ">=3.10.2,<4"
 
 [pypi-dependencies]
 biopython = ">=1.85, <2"
