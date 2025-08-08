@@ -167,6 +167,16 @@ setkey(topt_df, LUI, decimalLatitude, decimalLongitude)
 # Perform inner join
 merged_df <- soil_df[topt_df, nomatch = 0]
 
+#for each LUI, get the median T_Opt_site and median X4.5, and count the number of records
+results <- merged_df[, .(
+  Median_Topt_site = median(Topt_site, na.rm = TRUE),
+  Median_X4.5 = median(X4.5, na.rm = TRUE),
+  n = .N
+), by = LUI]
+
+# Save the results to a CSV file
+write.csv(results, "data/geoDataOut/merged_results.csv", row.names = FALSE)
+
 library(ggplot2)
 
 p <- ggplot(merged_df, aes(x = Topt_site, y = X4.5)) +

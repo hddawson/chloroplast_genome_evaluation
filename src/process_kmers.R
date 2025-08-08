@@ -7,14 +7,14 @@
 # Load required libraries
 library(data.table)
 library(parallel)
-
+library(Matrix)
 # Parse command line arguments
 args <- commandArgs(trailingOnly = TRUE)
 
 # Set default values
-kmer_dir <- "jellyfish_output/k31"
+kmer_dir <- "jellyfish_output/k21"
 output_file <- "data/kmer_presence_absence_matrix.rds"
-num_cores <- 16
+num_cores <- 19
 
 # Override defaults with command line arguments
 if (length(args) >= 1) kmer_dir <- args[1]
@@ -72,6 +72,7 @@ if (length(all_kmer_files) == 0) {
   stop("Error: No kmer files found in '", kmer_dir, "'")
 }
 
+
 # Extract LUIs from filenames and filter to only target LUIs
 extract_lui_from_filename <- function(filename) {
   base_name <- gsub("_counts\\.tsv$", "", filename)
@@ -121,51 +122,36 @@ cat("Successfully processed", length(results_list), "files\n")
 cat("Combining results...\n")
 all_kmers <- rbindlist(results_list, fill = TRUE)
 
+all_kmers$lui_id <- as.integer(factor(all_kmers$LUI))
+all_kmers$kmer_id <- as.integer(factor(all_kmers$kmer))
+
 cat("Processed", length(unique(all_kmers$LUI)), "genomes\n")
 cat("Total unique kmers:", length(unique(all_kmers$kmer)), "\n")
 
-# Create the presence/absence matrix
 cat("Creating presence/absence matrix...\n")
-presence_absence <- dcast(all_kmers, LUI ~ kmer, value.var = "present", fill = 0)
+# Create sparse matrix
+sparse_mat <- sparseMatrix(
+  i = all_kmers$lui_id,
+  j = all_kmers$kmer_id,
+  x = 1L,
+  dims = c(length(unique(all_kmers$lui_id)), length(unique(all_kmers$kmer_id))),
+  dimnames = list(
+    levels(factor(all_kmers$LUI)),
+    levels(factor(all_kmers$kmer))
+  )
+)
+
 
 # Create output directory if it doesn't exist
 output_dir <- dirname(output_file)
 if (!dir.exists(output_dir)) {
   dir.create(output_dir, recursive = TRUE)
 }
-saveRDS(presence_absence, output_file)
 
-cat("Created presence/absence matrix with dimensions:", nrow(presence_absence), "x", ncol(presence_absence), "\n")
+saveRDS(sparse_mat, output_file)
+#saveRDS(presence_absence, output_file)
 
-# Show some statistics
-cat("\n=== Matrix Statistics ===\n")
-cat("Number of genomes (rows):", nrow(presence_absence), "\n")
-cat("Number of kmers (columns):", ncol(presence_absence) - 1, "\n")  # -1 for LUI column
-cat("Total entries:", nrow(presence_absence) * (ncol(presence_absence) - 1), "\n")
-
-# Calculate sparsity
-total_entries <- nrow(presence_absence) * (ncol(presence_absence) - 1)
-non_zero_entries <- sum(presence_absence[, -1])
-sparsity <- (1 - non_zero_entries / total_entries) * 100
-
-cat("Sparsity (percentage of zeros):", round(sparsity, 2), "%\n")
-
-# Memory usage info
-memory_mb <- object.size(presence_absence) / 1024^2
-cat("Memory usage of presence/absence matrix:", round(memory_mb, 2), "MB\n")
-
-# Save the presence/absence matrix
-cat("\nSaving matrix to:", output_file, "\n")
+cat("Created presence/absence matrix with dimensions:", nrow(sparse_mat), "x", ncol(sparse_mat), "\n")
 
 
-# Show first few rows and columns
-cat("\n=== Sample of Matrix ===\n")
-print(head(presence_absence[, 1:10]))
-
-# Timing information
-end_time <- Sys.time()
-processing_time <- difftime(end_time, start_time, units = "mins")
-cat("\n=== Processing Complete ===\n")
-cat("Total processing time:", round(processing_time, 2), "minutes\n")
-cat("Files processed per minute:", round(length(kmer_files) / as.numeric(processing_time), 2), "\n")
 cat("Output saved to:", output_file, "\n") 
