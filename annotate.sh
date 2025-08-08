@@ -1,10 +1,26 @@
 #!/bin/bash
 set -e
 
+# Check if file list is provided
+if [ $# -eq 0 ]; then
+    echo "Usage: $0 <file_list>"
+    echo "  file_list: Path to a file containing basenames (one per line) to process"
+    echo "  Example: $0 data/smallFiles.txt"
+    exit 1
+fi
+
+file_list="$1"
+
+# Check if file list exists
+if [ ! -f "$file_list" ]; then
+    echo "Error: File list '$file_list' not found"
+    exit 1
+fi
+
 #you will want to do this all on a machine with rapid IO. SSD or better, lots of memory.
 # Set directories
 input_dir="/workdir/hdd29/theRefseqening/data/genomes"  # Directory containing input FASTA files
-final_dir="/workdir/hdd29/theRefseqening/data/results"      # Final directory for results
+final_dir="/workdir/hdd29/theRefseqening/data/results_oldAnno"      # Final directory for results
 temp_base_dir="/workdir/hdd29/tmp"                       # Temporary base directory
 singularity_image="cpgavas2_0.03.sif"          # Singularity image
 bind_dir="/workdir/hdd29/theRefseqening/data/genomes"  # Directory to bind in Singularity
@@ -33,8 +49,6 @@ process_file() {
 
   # Run the CLI tool in Singularity
   singularity exec \
-    --containall \
-    --writable-tmpfs \
     --env TMPDIR="$temp_base_dir" \
     --bind /workdir/hdd29/tmp:/tmp \
     --bind "$bind_dir:/mnt" \
@@ -42,8 +56,7 @@ process_file() {
     -in "/mnt/$(basename "$fasta_file")" \
     -db 1 \
     -pid "$pid_name" \
-    -out "$temp_dir" \
-     > "$temp_dir/run.log" 2>&1
+    -out "$temp_dir"
 
   # Check if the process succeeded
   if [ $? -eq 0 ]; then
@@ -68,4 +81,4 @@ export -f process_file
 export singularity_image bind_dir final_dir temp_base_dir TMPDIR # Export variables for subprocesses
 
 # Find all .fa files and process them in parallel with limited jobs
-find "$input_dir" -name "*.fa" | parallel --progress -j 40 process_file {}
+cat "$file_list" | parallel --progress -j 50 process_file {}
