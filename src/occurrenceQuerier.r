@@ -1,8 +1,6 @@
-
-
 # Title..........Geographic data from BIEN and GBIF
 # Created at..... 11-06-2023
-# Updated at..... 06-24-2024 (and further cleaned by Gemini)
+# Updated at..... 08-11-2025
 # Author: henry dawson
 if (!requireNamespace("CoordinateCleaner", quietly = TRUE)) {
   install.packages("CoordinateCleaner", repos = "https://cloud.r-project.org")
@@ -23,25 +21,17 @@ args <- commandArgs(trailingOnly = TRUE)
 # args[1]: source_term (e.g., "LUI", a unique ID for your workflow)
 # args[2]: query_term (e.g., "Quercus rubra", the species scientific name)
 if (length(args) < 2) {
-  stop("Usage: Rscript your_script.R <source_term> <query_term>")
+  stop("Usage: Rscript your_script.R <query_term> <output_dir>")
 }
 
-source_term <- args[1] # e.g., "LUI"
-query_term <- args[2]  # e.g., "Quercus rubra"
+query_term <- args[1]  # e.g., "Quercus rubra"
+output_dir <- args[2]  # e.g., "/path/to/output"
 
 # Clean species name for file/directory paths
 data_name <- gsub(query_term, pattern = ' ', replacement = '_')
 
 # Define output directory based on source_term and cleaned query_term
-dir.output <- paste0(getwd(), '/data/env_data/', source_term, "_", data_name)
-
-# Check if cleaned output file already exists
-output_file_path <- file.path(dir.output, paste0(data_name, '_occurrences_clean.csv'))
-
-if (file.exists(output_file_path)) {
-  message(paste("Cleaned output already exists for", query_term, "- skipping."))
-  quit(save = "no", status = 0)  # Exit script successfully
-}
+dir.output <- paste0(output_dir, data_name)
 
 # Create output directory if it doesn't exist
 if (!dir.exists(dir.output)) {
@@ -58,6 +48,9 @@ if (!dir.exists(path_species_bien)) dir.create(path_species_bien)
 # --- 1. Fetch GBIF Data ---
 message(paste("Fetching GBIF data for:", query_term))
 
+# wait for 1 second to avoid hitting GBIF API too quickly
+Sys.sleep(1)
+
 # Initialize an empty dataframe for GBIF results
 gbif_data <- data.frame(
   key = character(), scientificName = character(), decimalLatitude = numeric(),
@@ -73,9 +66,10 @@ gbif_data <- data.frame(
 ) # Define columns to prevent issues if initial search is empty
 
 tryCatch({
-  gbif_raw_data <- rgbif::occ_search(search = query_term, hasCoordinate = TRUE, hasGeospatialIssue=FALSE, limit = 100000) 
+  gbif_raw_data <- rgbif::occ_search(search = query_term, hasCoordinate = TRUE, hasGeospatialIssue=FALSE, limit = 10000) 
   if (!is.null(gbif_raw_data$data) && nrow(gbif_raw_data$data) > 0) {
     gbif_data <- as.data.frame(gbif_raw_data$data)
+    gbif_data$queryTerm <- query_term  # Add query term for tracking
   }
 }, error = function(e) {
   message(paste("Error fetching GBIF data for", query_term, ":", e$message))
@@ -84,17 +78,18 @@ tryCatch({
 # Handle GBIF data saving and initial output
 if (nrow(gbif_data) == 0) {
   message(paste("No GBIF occurrences found for:", query_term))
-  data.table::fwrite(file = paste0(path_species_gbif, '/missing_species.csv'), data.frame(species = query_term), append = TRUE)
-  gbif_processed_output <- data.frame(scientificName = query_term, decimalLatitude = NA, decimalLongitude = NA, year = NA)
+  gbif_processed_output <- data.frame(queryTerm = query_term, scientificName=NA, decimalLatitude = NA, decimalLongitude = NA, year = NA)
 } else {
   message(paste("Found", nrow(gbif_data), "GBIF occurrences for:", query_term))
   # Save all metadata
   data.table::fwrite(file = paste0(path_species_gbif, '/', data_name, '.csv'), gbif_data)
+  year_col <- if ("year" %in% colnames(gbif_data)) gbif_data$year else NA
   gbif_processed_output <- data.frame(
+    queryTerm = gbif_data$queryTerm,
     scientificName = gbif_data$scientificName,
     decimalLatitude = gbif_data$decimalLatitude,
     decimalLongitude = gbif_data$decimalLongitude,
-    year = gbif_data$year
+    year = year_col
   )
 }
 gbif_processed_output$package <- "GBIF"
@@ -124,23 +119,19 @@ tryCatch({
 # Handle BIEN data saving and initial output
 if (nrow(bien_data) == 0) {
   message(paste("No BIEN occurrences found for:", query_term))
-  data.table::fwrite(file = paste0(path_species_bien, '/missing_species.csv'), data.frame(species = query_term), append = TRUE)
-  bien_processed_output <- data.frame(scientificName = query_term, decimalLatitude = NA, decimalLongitude = NA, year= NA)
+  bien_processed_output <- data.frame(queryTerm = query_term, scientificName = NA, decimalLatitude = NA, decimalLongitude = NA, year= NA)
 } else {
   message(paste("Found", nrow(bien_data), "BIEN occurrences for:", query_term))
   # Save all metadata
   data.table::fwrite(file = paste0(path_species_bien, '/', data_name, '.csv'), bien_data)
   bien_processed_output <- data.frame(
+    queryTerm = query_term,
     scientificName = bien_data$scrubbed_species_binomial, # BIEN uses 'scrubbed_species_binomial'
     decimalLatitude = bien_data$latitude,                  # BIEN uses 'latitude'
     decimalLongitude = bien_data$longitude                 # BIEN uses 'longitude'
   )
-  # Add year column if it exists, otherwise use NA
-  if ("year" %in% colnames(bien_data)) {
-    bien_processed_output$year <- bien_data$year
-  } else {
-    bien_processed_output$year <- NA
-  }
+  # record date collected into year     
+  bien_processed_output$year <- as.numeric(format(as.Date(bien_data$date_collected, format = "%Y-%m-%d"), "%Y"))
 }
 bien_processed_output$package <- "BIEN"
 
@@ -150,8 +141,8 @@ message("Merging and performing initial data cleaning...")
 
 # Combine GBIF and BIEN data
 # Ensure column names match for rbind
-names(gbif_processed_output) <- c("scientificName", "decimalLatitude", "decimalLongitude", "year", "package")
-names(bien_processed_output) <- c("scientificName", "decimalLatitude", "decimalLongitude", "year", "package")
+names(gbif_processed_output) <- c("queryTerm", "scientificName", "decimalLatitude", "decimalLongitude", "year", "package")
+names(bien_processed_output) <- c("queryTerm", "scientificName", "decimalLatitude", "decimalLongitude", "year", "package")
 
 merge_data <- rbind(gbif_processed_output, bien_processed_output)
 
@@ -182,18 +173,8 @@ inval_flags <- CoordinateCleaner::cc_val(
   value = "flagged",
   verbose = FALSE
 )
-inval_data <- merge_data[!inval_flags, ]
-if (nrow(inval_data) > 0) {
-  message(paste("Detected", nrow(inval_data), "invalid coordinates based on cc_val. Saving to invalid_coords.csv"))
-  data.table::fwrite(file = file.path(dir.output, "invalid_coords.csv"), inval_data)
-  # You might want to stop or filter these out completely depending on strictness
-  merge_data <- merge_data[inval_flags, ] # Keep only valid ones
-} else {
-  message("No invalid coordinates detected by cc_val.")
-}
+merge_data <- merge_data[inval_flags, ]
 
-# Remove terrestrial records that fall in the ocean
-message("Filtering out marine occurrences (cc_sea)...")
 pirate_flags <- CoordinateCleaner::cc_sea(
   merge_data,
   lon = "decimalLongitude",
@@ -201,32 +182,17 @@ pirate_flags <- CoordinateCleaner::cc_sea(
   value = "flagged",
   verbose = FALSE
 )
-pirate_data <- merge_data[!pirate_flags, ]
-if (nrow(pirate_data) > 0) {
-  message(paste("Detected", nrow(pirate_data), "marine occurrences. Saving to pirate_coords.csv"))
-  data.table::fwrite(file = file.path(dir.output, "pirate_coords.csv"), pirate_data)
-  merge_data <- merge_data[pirate_flags, ] # Keep only terrestrial ones
-} else {
-  message("No marine occurrences detected by cc_sea.")
-}
+merge_data <- merge_data[pirate_flags, ]
 
 # Remove outliers per species
 message("Cleaning spatial outliers (cc_outl)...")
-species_with_enough_points <- merge_data %>%
-  group_by(scientificName) %>%
-  summarise(n_points = n()) %>%
-  pull(scientificName)
-
-# Separate data into those with enough points and those without
-data_to_clean <- merge_data %>% filter(scientificName %in% species_with_enough_points)
-data_to_keep_as_is <- merge_data %>% filter(!(scientificName %in% species_with_enough_points))
 
 cleaned_outliers_data <- data.frame()
-if (nrow(data_to_clean) > 0) {
+if (nrow(merge_data) > 0) {
   cleaned_outliers_data <- tryCatch(
     {
       CoordinateCleaner::cc_outl(
-        x = data_to_clean,
+        x = merge_data,
         lon = "decimalLongitude",
         lat = "decimalLatitude",
         species = "scientificName",
@@ -237,31 +203,20 @@ if (nrow(data_to_clean) > 0) {
     },
     error = function(e) {
       message(paste("Error during cc_outl for some species:", e$message, "Returning original data for those."))
-      return(data_to_clean) # Return original data if cc_outl errors
+      return(merge_data) # Return original data if cc_outl errors
     }
   )
 }
 
-# Combine cleaned data with data that didn't go through outlier cleaning
-merge_data_clean <- rbind(cleaned_outliers_data, data_to_keep_as_is)
 
-message(paste("Final number of cleaned records:", nrow(merge_data_clean)))
-
-# Ensure scientificName is correctly formatted (Genus species)
-# This step is good practice but might be redundant if your query_term is always "Genus species"
-merge_data_clean$scientificName <- sapply(strsplit(as.character(merge_data_clean$scientificName), " "), function(x) {
-  paste(x[1], x[2])
-})
-
+message(paste("Final number of cleaned records:", nrow(merge_data)))
 
 # --- 5. Output ---
 message("Saving final cleaned occurrence data...")
 
 # Ensure correct column order and content for final output
-final_output_cols <- c("scientificName", "decimalLatitude", "decimalLongitude", "year", "package")
-merge_data_final <- merge_data_clean %>% select(all_of(final_output_cols))
-
-merge_data_final$LUI <- source_term # Add the source term for tracking
+final_output_cols <- c("queryTerm", "scientificName", "decimalLatitude", "decimalLongitude", "year", "package")
+merge_data_final <- merge_data %>% select(all_of(final_output_cols))
 
 # Save the data
 # Using data_name in the filename ensures it's specific to the queried species

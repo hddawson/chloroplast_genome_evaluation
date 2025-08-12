@@ -1,8 +1,8 @@
 require(rtry)
 library(data.table)
 library(stringr)
-
-N_data <- rtry::rtry_import("data/43299.txt")
+setwd("/workdir/hdd29/chloroplast_genome_evaluation/")
+N_data <- rtry::rtry_import("data/TRY_data/43299_04082025234316/43299.txt")
 summary(N_data)
 
 N_data$TraitName <- as.factor(N_data$TraitName)
@@ -19,6 +19,26 @@ head(fixation_status)
 
 setDT(tax_data)
 setDT(fixation_status)
+
+#how many of fixation_status$AccSpeciesName are in tax_data$Organism
+
+intx <- intersect(fixation_status$AccSpeciesName, tax_data$Organism)
+length(unique(intx))
+
+fixation_status[, FixationLabel := fcase(
+  tolower(OrigValueStr) %in% c("n-fixer", "n fixer", "n2 fixing", "yes", "y", "true", "1", "yes, an n fixer", "high"), "Yes",
+  tolower(OrigValueStr) %in% c("no", "no-n-fixer", "non fixer", "no, not an n fixer", "none", "0", "n"), "No",
+  default = "Uncertain"
+)]
+
+table(fixation_status$FixationLabel)
+write.csv(fixation_status, "data/fixationStatus.csv")
+
+
+
+
+
+mean(fixation_status$AccSpeciesName %in% tax_data$Organism)
 
 clean_species <- function(name) {
   #specifiers <- c("x", "sp", "var", "subsp", "f", "spp", "cf", "aff", "ex")

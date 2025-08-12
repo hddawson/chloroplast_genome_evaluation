@@ -5,8 +5,8 @@ mkdir -p /workdir/hdd29/tmp
 export TMP_BASE_DIR="/workdir/hdd29/tmp"
 
 # Set directories
-input_dir="/workdir/hdd29/theRefseqening/data/genomes"
-final_dir="/workdir/hdd29/theRefseqening/data/results_good_80cores"
+input_dir="/workdir/hdd29/chloroplast_genome_evaluation/data/genomes"
+final_dir="/workdir/hdd29/chloroplast_genome_evaluation/data/annotationResults"
 singularity_image="cpgavas2_0.03.sif"
 bind_dir="$input_dir"
 
@@ -43,7 +43,7 @@ echo "Processing files from list: $file_list"
 
 process_file() {
   basename="$1"
-  fasta_file="$input_dir/${basename}.fa"
+  fasta_file="$input_dir/${basename}"
   pid_name=$(echo "$basename" | tr -d '_.')
   final_output_dir="$final_dir/${pid_name}"
 
