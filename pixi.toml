@@ -30,6 +30,7 @@ r-reshape2 = ">=1.4.4,<2"
 r-tidyverse = ">=2.0.0,<3"
 libgdal-netcdf = ">=3.10.2,<4"
 r-matrix = ">=1.7_3,<2"
+fastparquet = ">=2024.11.0,<2025"
 
 [pypi-dependencies]
 biopython = ">=1.85, <2"
