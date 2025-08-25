@@ -1,13 +1,13 @@
 #!/bin/bash
 set -euo pipefail
 
-mkdir -p data/tmp/genesAligned
+mkdir -p data/tmp/alignedGenes
 
 export MAFFT_BIN="/programs/mafft/bin/mafft"
 
-find data/tmp/genesToAlign -name "*.fasta" | parallel -j 10 '
+find data/tmp/genesToAlign -name "*.fasta" | parallel -j 20 '
     gene=$(basename {} .fasta)
-    outfile="data/tmp/genesAligned/${gene}_aligned.fasta"
+    outfile="data/tmp/alignedGenes/${gene}_aligned.fasta"
     echo "Aligning {} -> $outfile"
-    $MAFFT_BIN --adjustdirection --reorder --thread 8 --auto {} > "$outfile"
+    $MAFFT_BIN --adjustdirection --thread 4 --auto {} > "$outfile"
 '

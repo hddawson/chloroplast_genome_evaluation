@@ -30,12 +30,28 @@ rownames(mat) <- supermatrix$index
 # 4. PCA (center & scale optional for binary)
 pca_res <- prcomp(mat, center = TRUE, scale. = TRUE, rank.=2)
 saveRDS(pca_res,"data/pca.RDS")
-# 5. Plot PCA (base R)
+
+pca <- readRDS("data/pca.RDS")
 plot(
-  pca_res$x[, 1], pca_res$x[, 2],
+  pca$x[, 1], pca$x[, 2],
   xlab = "PC1", ylab = "PC2",
   main = "PCA on Binary Encoded Supermatrix"
 )
+
+scores <- as.data.frame(pca$x)
+str(pca$x)
+pca$x["NC_0001666.2",]
+
+
+library(data.table)
+
+pca_dt <- as.data.table(pca$x, keep.rownames = "genome_id")
+
+# Now you can filter by genome_id
+pca_dt[genome_id == "AB480556.1"]
+pca_dt$genome_id[which(str_detect(pca_dt$genome_id, "166"))]
+
+
 text(
   pca_res$x[, 1], pca_res$x[, 2],
   labels = rownames(mat),

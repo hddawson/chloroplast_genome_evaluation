@@ -423,6 +423,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zlib-1.3.1-hb9d3cd8_2.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zstandard-0.23.0-py313h536fd9c_2.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zstd-1.5.7-hb8e6e7a_2.conda
+      - pypi: https://files.pythonhosted.org/packages/cf/c8/f87576909f70e93867063e9ccf424beffd9439860f5f9e3079c32f993927/aaindex-1.1.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/9e/a4/552f20253a7c95988067c4955831bd17dd9b864fd5c215d15c2f63f2d415/biopython-1.85-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/c8/65/5245ce8c548a8422236c13ffcdcdada6a2a812c361e9e0c70548bb40b661/contourpy-1.3.2-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/e7/05/c19819d5e3d95294a6f5947fb9b9629efb316b96de511b418c53d245aae6/cycler-0.12.1-py3-none-any.whl
@@ -465,6 +466,17 @@ packages:
   purls: []
   size: 3566
   timestamp: 1562343890778
+- pypi: https://files.pythonhosted.org/packages/cf/c8/f87576909f70e93867063e9ccf424beffd9439860f5f9e3079c32f993927/aaindex-1.1.2-py3-none-any.whl
+  name: aaindex
+  version: 1.1.2
+  sha256: 678bf7e475dd72129aac5eff4e30ed053caf723f9a74e3eefe716e55a13ca578
+  requires_dist:
+  - sphinx ; extra == 'docs'
+  - pytest ; extra == 'test'
+  - pytest-cov ; extra == 'test'
+  - pytest-flake8 ; extra == 'test'
+  - pytest-timeout ; extra == 'test'
+  requires_python: '>=3.8'
 - conda: https://conda.anaconda.org/conda-forge/noarch/annotated-types-0.7.0-pyhd8ed1ab_1.conda
   sha256: e0ea1ba78fbb64f17062601edda82097fcf815012cf52bb704150a2668110d48
   md5: 2934f256a8acfe48f6ebb4fce6cde29c

@@ -3,7 +3,555 @@ library(ggplot2)
 library(stringr)
 library(matrixStats)
 
-data <- fread("data/selected_genomes.csv")
+data <- fread("data/tmp/rbcL_aln/merged_aa_counts.csv")
+sset <- c("rbcL_nuc_A", "rbcL_nuc_C", "rbcL_nuc_T", "rbcL_nuc_G",
+          "F", "T", "S", "W", "R", "G", "K", "P", "M", "N", "D", "L",
+          "C", "Q", "H", "V", "E", "I", "Y", "A")
+sset <- data[,..sset]
+
+par(mfrow=c(2,2))
+hist(sset$rbcL_nuc_A,col="coral")
+hist(sset$rbcL_nuc_T,col="pink")
+hist(sset$rbcL_nuc_G,col="seagreen")
+hist(sset$rbcL_nuc_C,col="blue")
+
+# nitrogen atoms per base
+N_nuc <- c(
+  rbcL_nuc_A = 5,
+  rbcL_nuc_C = 3,
+  rbcL_nuc_G = 5,
+  rbcL_nuc_T = 2
+)
+
+# nitrogen atoms per amino acid (side chain + backbone)
+# (canonical free AAs; ignoring peptide bond effects)
+N_aa <- c(
+  F=1, T=1, S=1, W=2, R=4, G=1, K=2, P=1, M=1, N=2, D=1, L=1,
+  C=1, Q=2, H=3, V=1, E=1, I=1, Y=1, A=1
+)
+
+# combine
+N_map <- c(N_nuc, N_aa)
+
+# multiply each column by its N count
+N_usage <- as.data.frame(sweep(sset, 2, N_map[colnames(sset)], `*`))
+colnames(N_usage) <- paste0(colnames(N_usage),"_N_usage")
+# total N per sample
+N_usage$total_N <- rowSums(N_usage, na.rm=TRUE)
+
+
+
+# plot histograms of total N and components
+par(mfrow=c(1,1))
+hist(N_usage$total_N)
+
+df <- cbind(N_usage, data)
+df <- df[df$total_N > 1100,]
+plot(df$GC_content_99_consensus,df$genomicGC)
+
+par(mfrow=c(1,1))
+boxplot(~rbcL_nuc_A+rbcL_nuc_T+rbcL_nuc_C+rbcL_nuc_G,data=df)
+boxplot(df[, c("rbcL_nuc_A","rbcL_nuc_T","rbcL_nuc_C","rbcL_nuc_G")],
+        main="fourfold nucleotide counts in rbcL",
+        ylab="Count",
+        col=c("coral","pink","blue","seagreen"))
+
+df$FixationLabel
+df$photosyntheticPathway
+
+par(mfrow=c(2,2))
+hist(df$rbcL_nuc_A,col="coral")
+hist(df$rbcL_nuc_T,col="pink")
+hist(df$rbcL_nuc_G,col="seagreen")
+hist(df$rbcL_nuc_C,col="blue")
+# colnames(data)[478:497] OG AA counts
+monomer_counts <- c(colnames(df)[503:522], "rbcL_nuc_C",  "rbcL_nuc_G",  "rbcL_nuc_A", "rbcL_nuc_T")
+
+plot(df$rbcL_nuc_A, df$total_N)
+points(df[grep("Poaceae", df$Taxonomy),"rbcL_nuc_A"],
+       df[grep("Poaceae", df$Taxonomy),"total_N"], col="seagreen", pch=19)
+points()
+
+a <- df[,monomer_counts]
+cm <- cor(a)
+library(pheatmap)
+pheatmap(cor(a))
+
+pca <- prcomp(df[,monomer_counts], scale.=TRUE)
+summary(pca)
+scores <- as.data.frame(pca$x)
+df <- cbind(df, scores)
+
+var_exp <- pca$sdev^2 / sum(pca$sdev^2) * 100
+x_lab <- paste0("PC1 (", round(var_exp[1], 1), "%)")
+y_lab <- paste0("PC2 (", round(var_exp[2], 1), "%)")
+
+scale_factor <- 5
+loadings <- pca$rotation[,1:2] * scale_factor
+
+par(mfrow=c(1,1))
+
+# PCA scores
+plot(df$PC1, df$PC2,
+     xlab=x_lab, ylab=y_lab,
+     main="PCA on AA counts + ACTG counts at 4d sites in rbcL", pch=19, col="grey")
+points(df[grep("Poaceae", df$Taxonomy),"PC1"],
+       df[grep("Poaceae", df$Taxonomy),"PC2"], col="seagreen", pch=19)
+points(df[grep("Montiaceae", df$Taxonomy),"PC1"],
+       df[grep("Montiaceae", df$Taxonomy),"PC2"], col="gold", pch=19)
+points(df[grep("Cactaceae", df$Taxonomy),"PC1"],
+       df[grep("Cactaceae", df$Taxonomy),"PC2"], col="red", pch=19)
+par(xpd=NA)
+legend("topright", inset=c(-0.2,-.1), legend=c("Other","Poaceae","Fabaceae"),
+       col=c("grey","seagreen","gold"), pch=19, bty="n")
+par(xpd=FALSE)
+
+# Loadings
+plot(0,0, type="n", xlim=range(loadings[,1])*1.2, ylim=range(loadings[,2])*1.2,
+     xlab=x_lab, ylab=y_lab, main="")
+arrows(0,0, loadings[,1], loadings[,2], length=0.1, col="red")
+text(loadings[,1], loadings[,2], labels=rownames(loadings),
+     pos=3, cex=0.7, col="black")
+abline(h=0,v=0,lty=2,col="lightgrey")
+
+#great, is the result same when we just look at AA's
+
+monomer_counts <- c(colnames(df)[503:522])
+pca <- prcomp(df[,monomer_counts], scale.=TRUE)
+summary(pca)
+scores <- as.data.frame(pca$x)
+df <- cbind(df, scores)
+a <- df[,c("Organism","total_N", "PC1")] # sort by 
+
+var_exp <- pca$sdev^2 / sum(pca$sdev^2) * 100
+x_lab <- paste0("PC1 (", round(var_exp[1], 1), "%)")
+y_lab <- paste0("PC2 (", round(var_exp[2], 1), "%)")
+
+scale_factor <- 5
+loadings <- pca$rotation[,1:2] * scale_factor
+
+par(mfrow=c(1,2))
+
+# PCA scores
+plot(df$PC1, df$PC2,
+     xlab=x_lab, ylab=y_lab,
+     main="PCA on AA counts in rbcL", pch=19, col="grey")
+points(df[grep("Poaceae", df$Taxonomy),"PC1"],
+       df[grep("Poaceae", df$Taxonomy),"PC2"], col="seagreen", pch=19)
+points(df[grep("Fabaceae", df$Taxonomy),"PC1"],
+       df[grep("Fabaceae", df$Taxonomy),"PC2"], col="gold", pch=19)
+par(xpd=NA)
+legend("topright", inset=c(-0.2,-.1), legend=c("Other","Poaceae","Fabaceae"),
+       col=c("grey","seagreen","gold"), pch=19, bty="n")
+par(xpd=FALSE)
+
+# Loadings
+plot(0,0, type="n", xlim=range(loadings[,1])*1.2, ylim=range(loadings[,2])*1.2,
+     xlab=x_lab, ylab=y_lab, main="")
+arrows(0,0, loadings[,1], loadings[,2], length=0.1, col="red")
+text(loadings[,1], loadings[,2], labels=rownames(loadings),
+     pos=3, cex=0.7, col="black")
+abline(h=0,v=0,lty=2,col="lightgrey")
+
+monomer_counts <- c("rbcL_nuc_C",  "rbcL_nuc_G",  "rbcL_nuc_A", "rbcL_nuc_T")
+pca <- prcomp(df[,monomer_counts], scale.=TRUE)
+summary(pca)
+scores <- as.data.frame(pca$x)
+df <- cbind(df, scores)
+
+var_exp <- pca$sdev^2 / sum(pca$sdev^2) * 100
+x_lab <- paste0("PC1 (", round(var_exp[1], 1), "%)")
+y_lab <- paste0("PC2 (", round(var_exp[2], 1), "%)")
+
+scale_factor <- 5
+loadings <- pca$rotation[,1:2] * scale_factor
+
+par(mfrow=c(1,2))
+
+# PCA scores
+plot(df$PC1, df$PC2,
+     xlab=x_lab, ylab=y_lab,
+     main="PCA on 4d nucleotide counts in rbcL", pch=19, col="grey")
+points(df[grep("Poaceae", df$Taxonomy),"PC1"],
+       df[grep("Poaceae", df$Taxonomy),"PC2"], col="seagreen", pch=19)
+points(df[grep("Fabaceae", df$Taxonomy),"PC1"],
+       df[grep("Fabaceae", df$Taxonomy),"PC2"], col="gold", pch=19)
+par(xpd=NA)
+legend("topright", inset=c(-0.2,-.1), legend=c("Other","Poaceae","Fabaceae"),
+       col=c("grey","seagreen","gold"), pch=19, bty="n")
+par(xpd=FALSE)
+
+# Loadings
+plot(0,0, type="n", xlim=range(loadings[,1])*1.2, ylim=range(loadings[,2])*1.2,
+     xlab=x_lab, ylab=y_lab, main="")
+arrows(0,0, loadings[,1], loadings[,2], length=0.1, col="red")
+text(loadings[,1], loadings[,2], labels=rownames(loadings),
+     pos=3, cex=0.7, col="black")
+abline(h=0,v=0,lty=2,col="lightgrey")
+
+
+
+
+plot(pca$x[,1],pca$x[,2], main="PCA on AA counts + ACTG counts at 4d sites in rbcL",
+     xlab=x_lab, ylab=y_lab)
+points(df[grep("Poaceae", df$Taxonomy),"PC1"],df[grep("Poaceae", df$Taxonomy),"PC2"],
+       col="seagreen")
+points(df[grep("Fabaceae", df$Taxonomy),"PC1"],df[grep("Fabaceae", df$Taxonomy),"PC2"],
+       col="yellow")
+loadings <- pca$rotation[,1:2]
+arrows(0, 0, loadings[,1], loadings[,2], length=0.1, col="red")
+text(loadings[,1], loadings[,2], labels=rownames(loadings), col="red", cex=0.7)
+
+# create group column
+df$group <- fifelse(grepl("Poaceae", df$Taxonomy), "Poaceae",
+                    fifelse(grepl("Fabaceae", df$Taxonomy), "Fabaceae", "Other"))
+
+# melt the dataframe for ggplot
+library(reshape2)
+monomer_counts <- c(monomer_counts, "total_N")
+plot_df <- melt(df, id.vars=c("Organism","group"), measure.vars=monomer_counts,
+                variable.name="Monomer", value.name="Count")
+
+# save to PDF
+pdf("plots/monomer_boxplots.pdf", width=12, height=8)
+
+ggplot(plot_df, aes(x=group, y=Count, fill=group)) +
+  geom_boxplot(outlier.shape=NA) +
+  #geom_jitter(width=0.2, size=1, alpha=0.3) +
+  facet_wrap(~Monomer, scales="free_y", ncol=5) +
+  scale_fill_manual(values=c("Poaceae"="seagreen", "Fabaceae"="gold", "Other"="grey")) +
+  theme_minimal() +
+  theme(axis.text.x=element_text(angle=45, hjust=1),
+        legend.position="none") +
+  labs(x="Group", y="Count", title="Monomer Counts by Group")
+
+dev.off()
+
+
+#let's do some mapping!!
+
+genomic_cols <- c("rbcL_nuc_A","rbcL_nuc_C","rbcL_nuc_T","rbcL_nuc_G",
+                  "F","T","S","W","R","G","K","P","M","N","D","L",
+                  "C","Q","H","V","E","I","Y","A","genomicGC","genomeLength","total_N")
+
+# phenotype columns
+pheno_cols <- grep("^pheno_", colnames(df), value=TRUE)
+
+# initialize empty list
+all_results <- list()
+
+for(pcol in pheno_cols){
+  fmla <- as.formula(paste(pcol, "~", paste(genomic_cols, collapse="+")))
+  lm_fit <- lm(fmla, data=df)
+  sum_fit <- summary(lm_fit)
+  
+  coefs <- as.data.frame(sum_fit$coefficients)
+  coefs <- cbind(Predictor = rownames(coefs), coefs)
+  rownames(coefs) <- NULL
+  
+  # rename safely
+  colnames(coefs)[2:5] <- c("Estimate","StdError","tValue","pValue")
+  coefs$Phenotype <- pcol
+  coefs$R2 <- sum_fit$r.squared
+  
+  all_results[[pcol]] <- coefs
+}
+
+results_df <- bind_rows(all_results)
+head(results_df)
+
+hist(-log10(results_df$pValue))
+
+
+df$FixationLabel <- ifelse(df$FixationLabel == "Yes", "Yes", "No")
+df$FixationLabel <- factor(df$FixationLabel, levels=c("No","Yes"))
+table(df$FixationLabel)
+# 3. Build formula for logistic regression
+fmla <- as.formula(paste("FixationLabel ~", paste(genomic_cols, collapse="+")))
+
+# 4. Fit logistic regression
+fit <- glm(fmla, data=df, family=binomial)
+
+# 5. Summary
+summary(fit)
+
+
+#pseudo R^2
+1 - fit$deviance/fit$null.deviance 
+
+df$pred_prob <- predict(fit, type="response")
+y_binary <- as.integer(df$FixationLabel == "Yes")
+# scatter plot of predicted probability vs actual
+plot(df$pred_prob, y_binary + runif(length(y_binary), -0.05, 0.05),
+     xlab = "Predicted probability",
+     ylab = "Observed (1=Yes, 0=No)")
+
+library(pROC)
+roc_obj <- roc(df$FixationLabel, df$pred_prob)
+plot(roc_obj)
+auc(roc_obj)
+
+df_yes <- df %>% filter(FixationLabel == "Yes")
+df_no  <- df %>% filter(FixationLabel == "No")
+
+# downsample No to match Yes
+set.seed(123)
+
+library(caret)
+library(dplyr)
+library(stringr)
+
+taxonomy_lists <- str_split(df$Taxonomy, ";")
+all_terms <- unlist(taxonomy_lists)
+all_terms <- str_trim(all_terms)
+all_terms <-unique(all_terms)
+Orders <- all_terms[grep("ales", all_terms)]
+
+get_orders <- function(taxonomy, orders) {
+  terms_found <- orders[str_detect(taxonomy, orders)]
+  if(length(terms_found) == 0) return(NA_character_)
+  return(terms_found)
+}
+
+df$Order_found <- sapply(df$Taxonomy, get_orders, orders=Orders)
+df$nOrders <- sapply(df$Order_found, length)
+table(df$nOrders)
+
+df$Taxonomy[which(df$nOrders>1)]
+
+df$Order <- sapply(df$Order_found, function(x) if(length(x) > 0) x[1] else NA_character_)
+table(df$Order)
+#make a balanced dataset
+df$strata <- interaction(df$FixationLabel, df$Order)
+
+set.seed(123)
+train_index <- createDataPartition(df$strata, p = 0.5, list = FALSE, times = 5)
+
+yes_samples <- df %>% filter(FixationLabel == "Yes")
+no_samples <- df %>% filter(FixationLabel == "No")
+
+# count number of unique Orders
+orders <- unique(no_samples$Order)
+n_orders <- length(orders)
+
+# target number per Order for "No" to get roughly uniform sampling
+n_per_order <- floor(nrow(yes_samples) / n_orders)
+
+# sample "No" for each Order
+no_balanced <- no_samples %>%
+  group_by(Order) %>%
+  group_modify(~ {
+    n_target <- min(n_per_order, nrow(.x))
+    sample_n(.x, n_target)
+  }) %>%
+  ungroup()
+
+# combine with all "Yes" samples
+balanced_df <- bind_rows(yes_samples, no_balanced)
+
+# check distribution
+table(balanced_df$FixationLabel)
+table(balanced_df$Order, balanced_df$FixationLabel)
+
+fmla <- as.formula(paste("FixationLabel ~", paste(genomic_cols, collapse="+")))
+
+# 4. Fit logistic regression
+fit <- glm(fmla, data=balanced_df, family=binomial)
+
+# 5. Summary
+summary(fit)
+
+#pseudo R^2
+1 - fit$deviance/fit$null.deviance 
+
+balanced_df$pred_prob <- predict(fit, type="response")
+y_binary <- as.integer(balanced_df$FixationLabel == "Yes")
+# scatter plot of predicted probability vs actual
+plot(balanced_df$pred_prob, y_binary + runif(length(y_binary), -0.05, 0.05),
+     xlab = "Predicted probability",
+     ylab = "Observed (1=Yes, 0=No)")
+
+roc_obj <- roc(balanced_df$FixationLabel, balanced_df$pred_prob)
+plot(roc_obj)
+auc(roc_obj)
+
+######################################################
+######################################################
+######################################################
+######################################################
+######################################################
+######################################################
+
+
+yes_samples <- df %>% filter(FixationLabel == "Yes")
+no_samples  <- df %>% filter(FixationLabel == "No")
+yes_holdout_idx <- sample(nrow(yes_samples), size = floor(0.3 * nrow(yes_samples)))
+yes_holdout <- yes_samples[yes_holdout_idx, ]
+yes_train   <- yes_samples[-yes_holdout_idx, ]
+
+# 2. Sample a balanced number of No samples for training
+n_orders <- length(unique(no_samples$Order))
+n_per_order <- floor(nrow(yes_train) / n_orders)
+
+no_train <- no_samples %>%
+  group_by(Order) %>%
+  group_modify(~ {
+    n_target <- min(n_per_order, nrow(.x))
+    sample_n(.x, n_target)
+  }) %>%
+  ungroup()
+
+# Combine training data
+train_df <- bind_rows(yes_train, no_train)
+
+# Fit logistic regression
+fmla <- as.formula(paste("FixationLabel ~", paste(genomic_cols, collapse="+")))
+fit <- glm(fmla, data=train_df, family=binomial)
+
+# Training summary
+summary(fit)
+pseudo_R2 <- 1 - fit$deviance/fit$null.deviance
+pseudo_R2
+
+# Predict on holdout
+# include all held-out Yes samples and an equal-sized No set sampled from remaining Nos
+n_no_holdout <- nrow(yes_holdout)
+no_holdout <- no_samples %>%
+  filter(!row_number() %in% rownames(no_train)) %>% 
+  sample_n(n_no_holdout)
+
+test_df <- bind_rows(yes_holdout, no_holdout)
+test_df$pred_prob <- predict(fit, newdata=test_df, type="response")
+y_binary <- as.integer(test_df$FixationLabel == "Yes")
+
+# Plot predicted probability vs observed
+plot(test_df$pred_prob, y_binary + runif(length(y_binary), -0.05, 0.05),
+     xlab="Predicted probability", ylab="Observed (1=Yes, 0=No)",
+     main="Holdout Predictions", pch=16, col="grey")
+
+fab_idx <- grep("Fabaceae", test_df$Taxonomy)
+points(test_df$pred_prob[fab_idx],
+       y_binary[fab_idx] + runif(length(fab_idx), -0.05, 0.05),
+       col="forestgreen", pch=16)
+
+# ROC and AUC
+roc_obj <- roc(test_df$FixationLabel, test_df$pred_prob)
+plot(roc_obj, main="ROC Curve on Holdout")
+auc(roc_obj)
+
+fab_idx  <- grep("Fabaceae", test_df$Taxonomy)
+nonfab_idx <- setdiff(which(test_df$FixationLabel == "Yes"), fab_idx)
+
+# Compute accuracy for all positives
+all_pos_idx <- which(test_df$FixationLabel == "Yes")
+all_pos_pred <- ifelse(test_df$pred_prob[all_pos_idx] > 0.5, "Yes", "No")
+all_pos_acc <- mean(all_pos_pred == test_df$FixationLabel[all_pos_idx])
+
+# Accuracy for Fabaceae positives
+fab_pred <- ifelse(test_df$pred_prob[fab_idx] > 0.5, "Yes", "No")
+fab_acc <- mean(fab_pred == test_df$FixationLabel[fab_idx])
+
+# Accuracy for non-Fabaceae positives
+nonfab_pred <- ifelse(test_df$pred_prob[nonfab_idx] > 0.5, "Yes", "No")
+nonfab_acc <- mean(nonfab_pred == test_df$FixationLabel[nonfab_idx])
+
+cat("Accuracy on all positives:", all_pos_acc, "\n")
+cat("Accuracy on Fabaceae positives:", fab_acc, "\n")
+cat("Accuracy on non-Fabaceae positives:", nonfab_acc, "\n")
+
+run_once <- function(df, genomic_cols) {
+  set.seed(NULL)  # for randomness each run
+  
+  # Split Yes into train/holdout
+  yes_samples <- df %>% filter(FixationLabel == "Yes")
+  no_samples  <- df %>% filter(FixationLabel == "No")
+  
+  yes_holdout_idx <- sample(nrow(yes_samples), size = floor(0.3 * nrow(yes_samples)))
+  yes_holdout <- yes_samples[yes_holdout_idx, ]
+  yes_train   <- yes_samples[-yes_holdout_idx, ]
+  
+  # Balance No training samples across Orders
+  n_orders <- length(unique(no_samples$Order))
+  n_per_order <- floor(nrow(yes_train) / n_orders)
+  
+  no_train <- no_samples %>%
+    group_by(Order) %>%
+    group_modify(~ sample_n(.x, min(n_per_order, nrow(.x)))) %>%
+    ungroup()
+  
+  train_df <- bind_rows(yes_train, no_train)
+  
+  # Fit logistic regression
+  fmla <- as.formula(paste("FixationLabel ~", paste(genomic_cols, collapse="+")))
+  fit <- glm(fmla, data=train_df, family=binomial)
+  pseudo_R2 <- 1 - fit$deviance/fit$null.deviance
+  
+  # Build holdout set
+  n_no_holdout <- nrow(yes_holdout)
+  no_holdout <- no_samples %>% 
+    filter(!row_number() %in% rownames(no_train)) %>% 
+    sample_n(n_no_holdout)
+  
+  test_df <- bind_rows(yes_holdout, no_holdout)
+  test_df$pred_prob <- predict(fit, newdata=test_df, type="response")
+  
+  # ROC and AUC
+  roc_obj <- roc(test_df$FixationLabel, test_df$pred_prob, quiet=TRUE)
+  auroc <- auc(roc_obj)
+  
+  # Accuracy breakdown
+  fab_idx  <- grep("Fabaceae", test_df$Taxonomy)
+  nonfab_idx <- setdiff(which(test_df$FixationLabel == "Yes"), fab_idx)
+  all_pos_idx <- which(test_df$FixationLabel == "Yes")
+  
+  pred <- ifelse(test_df$pred_prob > 0.5, "Yes", "No")
+  
+  all_pos_acc   <- mean(pred[all_pos_idx]   == test_df$FixationLabel[all_pos_idx])
+  fab_acc       <- ifelse(length(fab_idx) > 0, mean(pred[fab_idx] == test_df$FixationLabel[fab_idx]), NA)
+  nonfab_acc    <- ifelse(length(nonfab_idx) > 0, mean(pred[nonfab_idx] == test_df$FixationLabel[nonfab_idx]), NA)
+  
+  return(data.frame(
+    pseudo_R2 = pseudo_R2,
+    AUROC = as.numeric(auroc),
+    Acc_all_pos = all_pos_acc,
+    Acc_fab = fab_acc,
+    Acc_nonfab = nonfab_acc
+  ))
+}
+
+# Example: run 1000 replicates
+res <- bind_rows(replicate(1000, run_once(df, genomic_cols), simplify=FALSE))
+saveRDS(res, "data/res.RDS")
+summary(res)
+hist(res$Acc_nonfab)
+hist(res$Acc_fab)
+cor(res$Acc_nonfab, res$Acc_fab)
+
+
+calib_plot <- function(df, group_name) {
+  df %>%
+    mutate(bin = ntile(pred_prob, 10)) %>%
+    group_by(bin) %>%
+    summarise(
+      mean_pred = mean(pred_prob),
+      obs_rate  = mean(FixationLabel == "Yes"),
+      n = n()
+    ) %>%
+    ggplot(aes(x = mean_pred, y = obs_rate, size = n)) +
+    geom_point() +
+    geom_line() +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") +
+    labs(title = paste("Calibration -", group_name),
+         x = "Predicted probability", y = "Observed probability") +
+    theme_minimal()
+}
+
+fab_df    <- test_df %>% filter(grepl("Fabaceae", Taxonomy))
+nonfab_df <- test_df %>% filter(!grepl("Fabaceae", Taxonomy))
+
+calib_plot(fab_df, "Fabaceae")
+calib_plot(nonfab_df, "non-Fabaceae")
+
 
 n_pos <- sum(str_detect(data$Taxonomy, "Poaceae"))
 
