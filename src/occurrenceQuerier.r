@@ -83,7 +83,9 @@ if (nrow(gbif_data) == 0) {
   message(paste("Found", nrow(gbif_data), "GBIF occurrences for:", query_term))
   # Save all metadata
   data.table::fwrite(file = paste0(path_species_gbif, '/', data_name, '.csv'), gbif_data)
+  gbif_data <- gbif_data[gbif_data$datasetKey != "50c9509d-22c7-4a22-a47d-8c48425ef4a7", ]
   year_col <- if ("year" %in% colnames(gbif_data)) gbif_data$year else NA
+  #drop iNaturalist observations, which have datasetKey 50c9509d-22c7-4a22-a47d-8c48425ef4a7
   gbif_processed_output <- data.frame(
     queryTerm = gbif_data$queryTerm,
     scientificName = gbif_data$scientificName,

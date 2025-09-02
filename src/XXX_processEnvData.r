@@ -28,7 +28,7 @@ process_file <- function(file) {
     p10 = quantile(get(colname), 0.1, na.rm = TRUE),
     p50 = quantile(get(colname), 0.5, na.rm = TRUE),
     p90 = quantile(get(colname), 0.9, na.rm = TRUE)
-    ), by = queryTerm]
+    ), by = species]
   
   # Rename percentile columns dynamically
   setnames(result, old = c("p10", "p50", "p90"), 
@@ -39,20 +39,30 @@ process_file <- function(file) {
 
 # Process files
 results <- lapply(csv_files, process_file)
-result <- Reduce(function(x, y) merge(x, y, by = "queryTerm", all = TRUE, sort = FALSE), results)
+result <- Reduce(function(x, y) merge(x, y, by = "species", all = TRUE, sort = FALSE), results)
 
 #get n_occurrences from a representative file 
+#T_Opt_site
 
 dt <- fread(csv_files[1])
 dt <- na.omit(dt)
 
 n_occs <- dt[, .(
   n_occurrences = .N
-), by = queryTerm]
+), by = species]
 
 result <- na.omit(result)
 
-data <- merge(result,n_occs,by = "queryTerm")
+data <- merge(result,n_occs,by = "species")
+sum(data$n_occurrences < 5)
+hist(data$Topt_site_p50)
+hist(data$Topt_site_p10)
+hist(data$Topt_site_p90)
+hist(log10(data$n_occurrences))
+hist(log10(data$n_occurrences))
+
+plot(data$wc2.1_2.5m_bio_1_p50,data$Topt_site_p50*0.01)
+abline(a=0,b=1,col="red")
 
 library(pheatmap)
 cm <- cor(data[,-1])
@@ -66,5 +76,5 @@ plot(pca$x[,1], pca$x[,2])
 
 plot(data$wc2.1_2.5m_bio_8_p50,data$Topt_site_p50)
 
-filtered_data <- data[which(data$n_occurrences > 10),]
+filtered_data <- data[which(data$n_occurrences > 5),]
 fwrite(filtered_data, "data/pheno.csv")

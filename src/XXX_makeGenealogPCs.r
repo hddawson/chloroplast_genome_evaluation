@@ -1,17 +1,19 @@
 library(data.table)
-
-data <- fread("data/tmp/aa_supermatrix_expanded_3pcs.csv")
+library(arrow)
+df <- read_parquet("data/tmp/onehot_aln.pq")
+data <- setDT(df)
 
 stopifnot(is.character(data[[1]]))
+data[is.na(data)] <- 0
 #drop all zero var columns 
 invariant_cols <- names(data)[sapply(data, function(x) length(unique(x)) == 1)]
 cat("Dropping", length(invariant_cols), "invariant columns\n")
 data <- data[, !..invariant_cols]
 
 pca <- prcomp(data[,-1], rank.=100, scale. = TRUE)
-saveRDS(pca, "data/tmp/aa_supermatrix_expanded_10pcs_pca.rds")
+saveRDS(pca, "data/tmp/onehot_aln_pca.rds")
 cat("PCA done!")
-
+quit()
 pca <- readRDS("data/tmp/aa_supermatrix_expanded_10pcs_pca.rds")
 summary(pca)
 plot(pca)

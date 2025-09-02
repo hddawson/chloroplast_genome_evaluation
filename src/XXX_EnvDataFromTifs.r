@@ -12,12 +12,12 @@ require(tidyverse)
 require(plyr)
 require(reshape2)
 require(terra)
-
+library(data.table)
 
 #'------------------------------------------------------------------------------------------------------------
 # (1) load geo data 
 #'------------------------------------------------------------------------------------------------------------
-data_clean = data.table::fread('/workdir/hdd29/chloroplast_genome_evaluation/data/combined_clean.csv')
+data_clean = data.table::fread('data/combinedOccurrences.csv')
 #data_clean <- data_clean[1:5000, ]
 
 head(data_clean)
@@ -29,7 +29,7 @@ dim(data_clean)
 # creating a fake "environmental unit": species - sample
 data_clean <-
   data_clean %>% 
-  ddply(.(LUI),mutate,envScientificName = paste0('env_',LUI,'_',1:length(decimalLatitude)))
+  ddply(.(species),mutate,envScientificName = paste0('env_',species,'_',1:length(decimalLatitude)))
 dim(data_clean)
 head(data_clean)
 
@@ -54,7 +54,7 @@ source('https://raw.githubusercontent.com/gcostaneto/envirotypeR/main/R/get_spat
 #terra::ext(desired_layer)   # Extent
 
 # Path to your folder of .tif files
-tif_dir <- "/local/workdir/hdd29/chloroplast_genome_evaluation/data/geoDataTifs"
+tif_dir <- "/local/workdir/hdd29/chloroplast_genome_evaluation/data/tifs"
 
 # Make sure output base directory exists
 base_out <- "data/geoDataOut"
@@ -94,11 +94,11 @@ for (tif_path in tif_files) {
 
   #keep only the LUI and the climate variable, this is all we need
   geo_df <- geo_df %>%
-    select(LUI, layer_name, decimalLatitude, decimalLongitude)
+    select(species, layer_name, decimalLatitude, decimalLongitude)
   
   # write out cleaned CSV
   out_file <- file.path(out_dir, paste0(layer_name, "_envData.csv"))
-  write.csv(geo_df,
+  fwrite(geo_df,
             file      = out_file,
             row.names = FALSE,
             quote     = FALSE)

@@ -2,7 +2,7 @@ require(rtry)
 library(data.table)
 library(stringr)
 setwd("/workdir/hdd29/chloroplast_genome_evaluation/")
-N_data <- rtry::rtry_import("data/TRY_data/43299_04082025234316/43299.txt")
+N_data <- rtry::rtry_import("data/43299.txt")
 summary(N_data)
 
 N_data$TraitName <- as.factor(N_data$TraitName)
@@ -46,7 +46,7 @@ length(unique(intx))
 
 write.csv(resolved, "data/fixationStatus.csv")
 
-phData <- rtry::rtry_import("data/TRY_data/42869_15072025181342/42869.txt")
+phData <- rtry::rtry_import("data/42869.txt")
 
 dim(phData)
 str(phData)

@@ -17,4 +17,4 @@ while read -r line; do
     echo "$line"
 done < "$query_file" #| xargs -I {} pixi run Rscript src/occurrenceQuerier.r "{}" "$output_dir"
 
-cat "$query_file" | parallel -j 15 pixi run Rscript src/occurrenceQuerier.r "{}" "$output_dir"
+cat "$query_file" | parallel -j 7 pixi run Rscript src/occurrenceQuerier.r "{}" "$output_dir"

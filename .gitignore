@@ -7,5 +7,6 @@ env_data/*
 # pixi environments
 .pixi
 *.egg-info
+results/*
 
 jellyfish_output/*

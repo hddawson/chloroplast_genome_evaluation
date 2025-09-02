@@ -249,29 +249,86 @@ def encode_using_pcas(aln_df, pcs,pc_limit=3):
     """
     return expanded_df
 
+def encode_onehot_anyvar(aln_df):
+    """"
+    :param aln df: as above, which shall have rows as samples and columns as sites
+    
+    process the df and, at each site, label the most common value as 0 and any other as 1
+
+    :return encoded_df: a one-hot encoded version of the input df
+    """
+    #initialize the encoded df
+    encoded_df = pd.DataFrame(index=aln_df.index)
+
+    #iterate over the columns
+    for col in tqdm(aln_df.columns):
+        #get the most common value
+        most_common = aln_df[col].mode()[0]
+
+        #create a new column with 0s and 1s
+        encoded_df[col] = aln_df[col].apply(lambda x: 0 if (x == most_common) else (np.nan if x == "-" else 1))
+
+    return encoded_df
+
+
+def encode_onehot_alleles_vectorized(aln_df, alleles=['A', 'T', 'C', 'G'], missing_char='-'):
+    """
+    Vectorized version for better performance on large datasets.
+    
+    :param aln_df: DataFrame with rows as samples and columns as sites
+    :param alleles: List of alleles to encode (default: ['A', 'T', 'C', 'G'])
+    :param missing_char: Character representing missing data (default: '-')
+    :return: DataFrame with one-hot encoded alleles, NaN for missing data
+    """
+    result_dfs = []
+    
+    for site in tqdm(aln_df.columns, desc="Encoding sites"):
+        site_data = aln_df[site]
+        site_dfs = []
+        
+        for allele in alleles:
+            col_name = f"{site}_{allele}"
+            # Vectorized operations for better performance
+            encoded = (site_data == allele).astype(float)
+            encoded[site_data == missing_char] = np.nan
+            site_dfs.append(pd.Series(encoded, name=col_name, index=aln_df.index))
+        
+        # Combine alleles for this site
+        site_df = pd.concat(site_dfs, axis=1)
+        result_dfs.append(site_df)
+    
+    # Combine all sites
+    result_df = pd.concat(result_dfs, axis=1)
+    
+    return result_df
+
 if __name__ == "__main__":
 
-    outfile = "data/aaindex1.csv"
+    #outfile = "data/aaindex1.csv"
     #download_all_idxs_to_csv(outfile)
 
-    aa_pcs = pd.read_csv("data/aaPCs.csv")
+    #aa_pcs = pd.read_csv("data/aaPCs.csv")
 
-    master_df = pd.read_csv("data/tmp/rbcL_aln/merged_aa_counts.csv")
+    master_df = pd.read_csv("data/alignment_input_data.csv")
     lui_list = master_df["ID"].unique().tolist()
 
-    aln_files = glob.glob("data/tmp/alignedGenes/*AA_aligned.fasta")
+    aln_files = glob.glob("data/tmp/alignedGenes/*CDS_aligned.fasta")
 
-    produce_supermatrix(lui_list, aln_files, "data/tmp/aa_supermatrix.fasta")
+    produce_supermatrix(lui_list, aln_files, "data/tmp/cds_supermatrix.fasta")
 
-    aln_df = get_sites_from_alignment_fasta("data/tmp/aa_supermatrix.fasta", samples_per_site=0.99)
+    aln_df = get_sites_from_alignment_fasta("data/tmp/cds_supermatrix.fasta", samples_per_site=0.99)
     #expand the supermatrix
 
-    expanded_df = encode_using_pcas(aln_df, aa_pcs, pc_limit=3)
+    majMinor_df = encode_onehot_anyvar(aln_df)
+    majMinor_df.to_parquet("data/tmp/majMinor_aln.pq", index=True)
+
+    onehot_df = encode_onehot_alleles_vectorized(aln_df)
+    onehot_df.to_parquet("data/tmp/onehot_aln.pq", index=True)
 
     #save the expanded df
-    expanded_df.to_csv("data/tmp/aa_supermatrix_expanded_3pcs.csv", index=True)
+    #expanded_df.to_csv("data/tmp/aa_supermatrix_expanded_3pcs.csv", index=True)
 
-    expanded_df = encode_using_pcas(aln_df, aa_pcs, pc_limit=10)
+    #expanded_df = encode_using_pcas(aln_df, aa_pcs, pc_limit=10)
 
     #save the expanded df
-    expanded_df.to_csv("data/tmp/aa_supermatrix_expanded_10pcs.csv", index=True)
+    #expanded_df.to_csv("data/tmp/aa_supermatrix_expanded_10pcs.csv", index=True)
