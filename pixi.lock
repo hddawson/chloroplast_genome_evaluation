@@ -351,6 +351,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/r-openssl-2.3.3-r44he8289e2_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/r-optparse-1.7.5-r44hc72bb7e_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/r-pbdzmq-0.3_14-r44h549f438_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/r-pheatmap-1.0.13-r44hc72bb7e_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/r-pillar-1.11.0-r44hc72bb7e_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/r-pkgconfig-2.0.3-r44hc72bb7e_4.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/r-plyr-1.8.9-r44h3697838_2.conda
@@ -5511,6 +5512,19 @@ packages:
   purls: []
   size: 529770
   timestamp: 1744540851421
+- conda: https://conda.anaconda.org/conda-forge/noarch/r-pheatmap-1.0.13-r44hc72bb7e_0.conda
+  sha256: 7c40f29c7481b34c6ebd1ddd64847f8edbb7e5f6e88d8fd6524224d273ba8f76
+  md5: e5fdaeedb5617d6b7cf961278e138d53
+  depends:
+  - r-base >=4.4,<4.5.0a0
+  - r-gtable
+  - r-rcolorbrewer
+  - r-scales
+  license: GPL-2.0-only
+  license_family: GPL2
+  purls: []
+  size: 93089
+  timestamp: 1749146188991
 - conda: https://conda.anaconda.org/conda-forge/noarch/r-pillar-1.11.0-r44hc72bb7e_0.conda
   sha256: 14ce3aaf1d75061da0a3e11c57ef03ed1c053244ac2a19992d600822a74aea5d
   md5: 6fc3eef9e2b83886004b85758b33d61c

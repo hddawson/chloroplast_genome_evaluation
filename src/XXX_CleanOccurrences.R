@@ -101,6 +101,12 @@ message(paste("Total removed:", initial_count - nrow(final_cleaned_data)))
 message(paste("Retention rate:", 
               round(100 * nrow(final_cleaned_data) / initial_count, 2), "%"))
 message(paste("Unique species in final dataset:", 
-              length(unique(final_cleaned_data$scientificName))))
+              length(unique(final_cleaned_data$species))))
 message(paste("Output saved to:", output_file))
+
+#check merge 
+
+geno_dat <- fread("data/selected_genomes.csv")
+foundSpecies <- unique(final_cleaned_data$species)
+length(intersect(geno_dat$Organism, foundSpecies))
 

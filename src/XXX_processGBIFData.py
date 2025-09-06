@@ -93,8 +93,9 @@ def process_gbif_chunks(gbif_file: str, taxonomy_organisms: Set[str],
     with tqdm(desc="Processing chunks", unit="chunks") as pbar:
         for chunk in chunk_iterator:
             chunk_num += 1
+            chunk_filtered = chunk
             # Filter out iNaturalist records
-            chunk_filtered = chunk[chunk['datasetKey'] != INAT_KEY]
+            #chunk_filtered = chunk[chunk['datasetKey'] != INAT_KEY]
             
             # Filter to only records with scientificName in taxonomy organisms
             # Use .isin() for vectorized operation - much faster than loops

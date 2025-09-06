@@ -1,15 +1,13 @@
 library(data.table)
 library(ggplot2)
-data <- fread("data/tmp/rbcL_aln/merged_aa_counts.csv")
-orders <- unique(unlist(str_split(data$Taxonomy,";")))
-orders <- orders[grep("ales", orders)]
-orders <- orders[-58] #drop Halesia
-pattern <- paste(orders, collapse = "|")  # regex OR pattern
-data$Order <- str_extract(data$Taxonomy, pattern)
+data <- fread("data/alignment_input_data.csv")
 table(data$Order)
 
 Order_counts <- data[, .N, by = Order]
 hist(Order_counts$N)
+
+table(data$FixationLabel)
+table(data$photosyntheticPathway)
 
 
 order_dt <- melt(
@@ -19,11 +17,6 @@ order_dt <- melt(
   value.name = "Topt_site_p50")
 order_dt$Topt_site_p50 <-order_dt$Topt_site_p50 / 100 
 
-order_dt_bio8 <- melt(
-  data,
-  id.vars = "Order",
-  measure.vars = "pheno_wc2.1_2.5m_bio_8_p50",
-  value.name = "wc2.1_2.5m_bio_8_p50")
 
 par(mfrow=c(1,2))
 hist(order_dt$Topt_site_p50, main="Species median T_opt_site",xlab="T_opt_site (C)")
@@ -47,3 +40,5 @@ p <- ggplot(order_dt, aes(x = Topt_site_p50)) +
     inherit.aes = FALSE,
     hjust = 1.1, vjust = 1.5, size = 3
   )
+
+p

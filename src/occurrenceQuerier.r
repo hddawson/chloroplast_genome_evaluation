@@ -49,7 +49,7 @@ if (!dir.exists(path_species_bien)) dir.create(path_species_bien)
 message(paste("Fetching GBIF data for:", query_term))
 
 # wait for 1 second to avoid hitting GBIF API too quickly
-Sys.sleep(1)
+Sys.sleep(0)
 
 # Initialize an empty dataframe for GBIF results
 gbif_data <- data.frame(
@@ -66,7 +66,9 @@ gbif_data <- data.frame(
 ) # Define columns to prevent issues if initial search is empty
 
 tryCatch({
-  gbif_raw_data <- rgbif::occ_search(search = query_term, hasCoordinate = TRUE, hasGeospatialIssue=FALSE, limit = 10000) 
+  #gbif_raw_data <- rgbif::occ_search(search = query_term, hasCoordinate = TRUE, hasGeospatialIssue=FALSE, limit = 10000) 
+  #set it null - skip query to gbif
+  gbif_raw_data <- null
   if (!is.null(gbif_raw_data$data) && nrow(gbif_raw_data$data) > 0) {
     gbif_data <- as.data.frame(gbif_raw_data$data)
     gbif_data$queryTerm <- query_term  # Add query term for tracking
@@ -83,7 +85,7 @@ if (nrow(gbif_data) == 0) {
   message(paste("Found", nrow(gbif_data), "GBIF occurrences for:", query_term))
   # Save all metadata
   data.table::fwrite(file = paste0(path_species_gbif, '/', data_name, '.csv'), gbif_data)
-  gbif_data <- gbif_data[gbif_data$datasetKey != "50c9509d-22c7-4a22-a47d-8c48425ef4a7", ]
+  #gbif_data <- gbif_data[gbif_data$datasetKey != "50c9509d-22c7-4a22-a47d-8c48425ef4a7", ]
   year_col <- if ("year" %in% colnames(gbif_data)) gbif_data$year else NA
   #drop iNaturalist observations, which have datasetKey 50c9509d-22c7-4a22-a47d-8c48425ef4a7
   gbif_processed_output <- data.frame(

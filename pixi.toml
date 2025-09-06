@@ -35,6 +35,7 @@ r-geosphere = ">=1.5_20,<2"
 r-arrow = ">=19.0.1,<20"
 r-optparse = ">=1.7.5,<2"
 r-bglr = ">=1.1.4,<2"
+r-pheatmap = ">=1.0.13,<2"
 
 [pypi-dependencies]
 biopython = ">=1.85, <2"
