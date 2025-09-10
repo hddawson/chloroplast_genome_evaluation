@@ -309,21 +309,25 @@ if __name__ == "__main__":
 
     #aa_pcs = pd.read_csv("data/aaPCs.csv")
 
-    master_df = pd.read_csv("data/alignment_input_data.csv")
+    master_df = pd.read_parquet("data/processed_data.parquet")
     lui_list = master_df["ID"].unique().tolist()
 
-    aln_files = glob.glob("data/tmp/alignedGenes/*CDS_aligned.fasta")
+    aln_files = glob.glob("data/tmp/alignedGenes/*AA_aligned.fasta")
 
-    produce_supermatrix(lui_list, aln_files, "data/tmp/cds_supermatrix.fasta")
+    produce_supermatrix(lui_list, aln_files, "data/tmp/aa_supermatrix.fasta")
 
-    aln_df = get_sites_from_alignment_fasta("data/tmp/cds_supermatrix.fasta", samples_per_site=0.99)
+    aln_df = get_sites_from_alignment_fasta("data/tmp/aa_supermatrix.fasta", samples_per_site=0.99)
+
+    #save the aln_df
+    aln_df.to_parquet("data/tmp/aa_supermatrix.parquet", index=True)
     #expand the supermatrix
 
-    majMinor_df = encode_onehot_anyvar(aln_df)
-    majMinor_df.to_parquet("data/tmp/majMinor_aln.pq", index=True)
+    #majMinor_df = encode_onehot_anyvar(aln_df)
+    #majMinor_df.to_parquet("data/tmp/majMinor_aln.pq", index=True)
 
-    onehot_df = encode_onehot_alleles_vectorized(aln_df)
-    onehot_df.to_parquet("data/tmp/onehot_aln.pq", index=True)
+    #print("One-hot encoding the alleles")
+    #onehot_df = encode_onehot_alleles_vectorized(aln_df)
+    #onehot_df.to_parquet("data/tmp/onehot_aln.pq", index=True)
 
     #save the expanded df
     #expanded_df.to_csv("data/tmp/aa_supermatrix_expanded_3pcs.csv", index=True)

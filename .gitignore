@@ -8,5 +8,10 @@ env_data/*
 .pixi
 *.egg-info
 results/*
-
+tmp/*
 jellyfish_output/*
+
+.RData
+.Rhistory
+
+*.tar.gz

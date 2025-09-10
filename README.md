@@ -36,8 +36,7 @@ third, get occurrences by querying the organism name into GBIF, just get the big
 
 XXX_processGBIFData.py --> find overlap between taxonomy_info and gbif search
 XXX_CleanOccurrences.R --> use r packages to clean occurrences
-XXX_EnvDataFromTifs.r --> 
-XXX_processEnvData.r --> 
+
 
 At some point, process data from TRY 
 
@@ -47,14 +46,20 @@ walk throughd dataProcessing.ipynb until you get to alignmet step, then,
 src/aligner.sh
 
 
-
+Then, we will also need to query GBIF
 pixi run python src/3_getOccurrences.py data/taxonomy_info.csv
 
 Fourth, process occurences into environmental data
 
 pixi run python src/3_getOccurrences.py data/taxonomy_info.csv data/occurrences/
 
-(head -n 1 $(find data/occurrences -name '*_clean.csv' | head -n 1) && find data/occurrences -name '*_clean.csv' | xargs -I {} tail -n +2 {}) > data/combinedOccurrences.csv
+(head -n 1 $(find data/occurrences -name '*_clean.csv' | head -n 1) && find data/occurrences -name '*_clean.csv' | xargs -I {} tail -n +2 {}) > data/combinedOccurrences_BIEN.csv
+
+XXX_EnvDataFromTifs.r --> 
+XXX_processEnvData.r --> 
+
+
+
 
 #find the species with few occurrences
 pixi run python src/3_point_5_reQuery.py 
@@ -73,3 +78,10 @@ Querying GBIF and BIEN is kind of sad, because sometimes the API gives out and y
 
 then I get the envData from the tifs 
 pulling_envData.r
+
+
+make tree
+
+/programs/FastTree-2.1.11/FastTree -nt -gtr -gamma -log tree.log < data/tmp/cds_supermatrix.fasta > tree.nwk
+
+/programs/raxml-ng_v1.2.0/raxml-ng --all --msa ../data/tmp/cds_supermatrix.fasta --model GTR+G --bs-trees 10 --threads auto

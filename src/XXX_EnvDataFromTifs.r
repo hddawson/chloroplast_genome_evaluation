@@ -17,7 +17,7 @@ library(data.table)
 #'------------------------------------------------------------------------------------------------------------
 # (1) load geo data 
 #'------------------------------------------------------------------------------------------------------------
-data_clean = data.table::fread('data/combinedOccurrences.csv')
+data_clean = data.table::fread('data/combinedCleanOccurrences.csv')
 #data_clean <- data_clean[1:5000, ]
 
 head(data_clean)
@@ -29,7 +29,7 @@ dim(data_clean)
 # creating a fake "environmental unit": species - sample
 data_clean <-
   data_clean %>% 
-  ddply(.(species),mutate,envScientificName = paste0('env_',species,'_',1:length(decimalLatitude)))
+  ddply(.(queryTerm),mutate,envScientificName = paste0('env_',queryTerm,'_',1:length(decimalLatitude)))
 dim(data_clean)
 head(data_clean)
 
@@ -94,7 +94,7 @@ for (tif_path in tif_files) {
 
   #keep only the LUI and the climate variable, this is all we need
   geo_df <- geo_df %>%
-    select(species, layer_name, decimalLatitude, decimalLongitude)
+    select(queryTerm, layer_name, decimalLatitude, decimalLongitude)
   
   # write out cleaned CSV
   out_file <- file.path(out_dir, paste0(layer_name, "_envData.csv"))

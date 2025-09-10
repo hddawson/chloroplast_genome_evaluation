@@ -1,7 +1,7 @@
 library(data.table)
 library(arrow)
 library(ggplot2)
-df <- read_parquet("data/tmp/onehot_aln.pq")
+df <- read_parquet("data/tmp/majMinor_aln.pq")
 data <- setDT(df)
 
 stopifnot(is.character(data[[1]]))
@@ -12,16 +12,16 @@ cat("Dropping", length(invariant_cols), "invariant columns\n")
 data <- data[, !..invariant_cols]
 
 pca <- prcomp(data[,-1], rank.=100, scale. = TRUE)
-saveRDS(pca, "data/tmp/onehot_aln_pca.rds")
+saveRDS(pca, "data/tmp/majMinor_aln_pca.rds")
 cat("PCA done!")
 quit()
-data <- fread("data/alignment_input_data.csv")
-pca <- readRDS("data/tmp/onehot_aln_pca.rds")
+data <- read_parquet("data/processed_data.parquet")
+pca <- readRDS("data/tmp/majMinor_aln_pca.rds")
 summary(pca)
 pvar <- pca$sdev^2 / sum(pca$sdev^2)
 pvar <- round(pvar*100,2)
 
-plot(pvar)
+barplot(pvar)
 plot(pca$x[,1],pca$x[,2])
 scores <- as.data.frame(pca$x)
 df <- cbind(data,scores)
@@ -30,13 +30,13 @@ plot(pca$x[,2],pca$x[,3])
 
 table(df$Order)
 
-with(df[grep("Poales", Taxonomy), ],
+with(df[grep("Poales", df$Taxonomy), ],
      points(PC2, PC3, col="seagreen"))
 
-with(df[grep("Fabales", Taxonomy), ],
+with(df[grep("Fabales", df$Taxonomy), ],
      points(PC2, PC3, col="yellow"))
 
-with(df[grep("Pinales", Taxonomy), ],
+with(df[grep("Pinales", df$Taxonomy), ],
      points(PC2, PC3, col="blue"))
 
 orders <- unique(df$Order)
@@ -138,6 +138,9 @@ plot_pca_orders <- function(A, B, df, pvar, orders, order_colors, order_shapes, 
 plot_pca_orders(1, 2, df, pvar, orders, order_colors, order_shapes)   # PC1 vs PC2
 plot_pca_orders(2, 3, df, pvar, orders, order_colors, order_shapes)   # PC1 vs PC2
 plot_pca_orders(3, 4, df, pvar, orders, order_colors, order_shapes)   # PC1 vs PC2
+plot_pca_orders(5, 6, df, pvar, orders, order_colors, order_shapes)   # PC1 vs PC2
+plot_pca_orders(7, 8, df, pvar, orders, order_colors, order_shapes)   # PC1 vs PC2
+plot_pca_orders(9, 10, df, pvar, orders, order_colors, order_shapes)   # PC1 vs PC2
 plot_pca_orders(13, 12, df, pvar, orders, order_colors, order_shapes)   # PC1 vs PC2
 plot_pca_orders(20, 21, df, pvar, orders, order_colors, order_shapes)   # PC1 vs PC2
 

@@ -1,0 +1,121 @@
+---
+title: "treee"
+output: html_notebook
+editor_options: 
+  chunk_output_type: inline
+---
+
+
+```{r}
+library(ape)
+library(data.table)
+library(arrow)
+setwd("/workdir/hdd29/chloroplast_genome_evaluation")
+```
+
+```{r}
+
+data <- as.data.table(read_parquet("data/processed_data.parquet"))
+
+barplot(table(data$Order))
+head(data$ID)
+
+```
+```{r}
+ftree <- read.tree("data/Fasttree/Fasttree.nwk")
+cat("Number of tips:", Ntip(ftree), "\n")
+cat("Number of nodes:", Nnode(ftree), "\n")
+head(ftree$tip.label)
+summary(ftree$edge.length)
+
+
+```
+```{r}
+set.seed(123)
+subtree <- keep.tip(ftree, sample(ftree$tip.label, 1000))
+plot(subtree, show.tip.label=FALSE, type="fan")
+```
+```{r}
+# Check if Poales is monophyletic
+poales_ids <- data[Order == "Poales", ID]
+poales_in_tree <- poales_ids[poales_ids %in% ftree$tip.label]
+cat("Missing from tree:", length(poales_ids) - length(poales_in_tree), "\n")
+
+is_mono <- is.monophyletic(ftree, poales_in_tree)
+cat("Is Poales monophyletic?", is_mono, "\n")
+
+orders <- unique(data$Order)
+for (o in orders) {
+  if (!is.monophyletic(ftree, data[Order==o, ID]))
+    cat(o, "❌ not monophyletic\n")
+  else
+    cat(o, "✅ monophyletic\n")
+}
+
+```
+
+So there is a decent mix of monophyly here. Some clades really are, others are not. About 2/3 of the orders are not monophyletic. 
+
+```{r}
+fabs_ids <- data[Order == "Fabales", ID]
+fabs_in_tree <- fabs_ids[fabs_ids %in% ftree$tip.label]
+
+# Extract fabales subtree to see structure
+fabales_mrca <- getMRCA(ftree, fabs_in_tree)
+fabales_clade_tips <- extract.clade(ftree, fabales_mrca)$tip.label
+
+# Find non-fabales tips in the fabales clade
+intruders <- fabales_clade_tips[!fabales_clade_tips %in% fabs_in_tree]
+cat("Non-fabales tips in fabales clade:", length(intruders), "\n")
+
+```
+
+```{r}
+pdf("plots/fabales_tree.pdf", width=12, height=12)
+
+fabales_ids <- data[Order == "Fabales", ID]
+fabales_in_tree <- fabales_ids[fabales_ids %in% ftree$tip.label]
+
+other_tips <- ftree$tip.label[!ftree$tip.label %in% fabales_in_tree]
+sample_other <- sample(other_tips, 900)  # Sample 900 non-Fabales
+sample_fabales <- sample(fabales_in_tree, min(100, length(fabales_in_tree)))  # Up to 100 Fabales
+
+subsample_tips <- c(sample_other, sample_fabales)
+subtree <- keep.tip(ftree, subsample_tips)
+
+# Create color vector
+tip_colors <- rep("black", Ntip(subtree))
+tip_colors[subtree$tip.label %in% fabales_in_tree] <- "red"
+
+# Plot with colored tips
+plot(subtree, show.tip.label=FALSE, type="fan", 
+    tip.color=tip_colors, cex=1.5)
+legend("topright", legend=c("Other orders", "Fabales"), 
+      col=c("black", "red"), pch=19, cex=0.8)
+dev.off()
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

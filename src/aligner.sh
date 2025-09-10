@@ -9,5 +9,5 @@ find data/tmp/genesToAlign -name "*AA.fasta" | parallel -j 20 '
     gene=$(basename {} .fasta)
     outfile="data/tmp/alignedGenes/${gene}_aligned.fasta"
     echo "Aligning {} -> $outfile"
-    $MAFFT_BIN --adjustdirection --thread 4 --auto {} > "$outfile"
+    $MAFFT_BIN --adjustdirection --thread 4 --auto --treeout {} > "$outfile"
 '
