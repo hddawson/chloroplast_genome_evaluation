@@ -1,10 +1,100 @@
 library(data.table)
 library(parallel)
 library(arrow)
-
+setwd("/workdir/hdd29/chloroplast_genome_evaluation")
 df        <- as.data.table(read_parquet("data/processed_data.parquet"))
 hist(df$Total_Amino_Acids, main="Total AA per plastome")
 hist(df$geno_genomeLength)
+
+y <- df$pheno_Topt_site_p50
+X <- as.data.table(read_parquet("data/rbcL_embeddings.parquet"))
+
+#merge on ID in df and sample_id in X, fit a lm
+
+merged <- merge(df[, .(ID, pheno_Topt_site_p50)], X, by.x="ID", by.y="sample_id")
+fit <- lm(pheno_Topt_site_p50 ~ . -ID, data=merged)
+summary(fit)
+plot(fit$fitted.values, merged$pheno_Topt_site_p50)
+
+aa_cols <- intersect(c("A","R","N","D","C","Q","E","G","H","I",
+                       "L","K","M","F","P","S","T","W","Y","V"),
+                     names(df))
+
+form <- as.formula(paste("pheno_Topt_site_p50 ~", paste(aa_cols, collapse="+")))
+fit2 <- lm(form, data=df)
+summary(fit2)
+plot(fit2$fitted.values, df$pheno_Topt_site_p50)
+
+par(mfrow=c(1,2), mar=c(4,4,3,1))
+
+plot(fit$fitted.values, merged$pheno_Topt_site_p50,
+     xlab="Fitted T_opt (rbcL embeddings)",
+     ylab="Observed T_opt",
+     main="rbcL Embeddings Model")
+
+plot(fit2$fitted.values, df$pheno_Topt_site_p50,
+     xlab="Fitted T_opt (AA proportions)",
+     ylab="Observed T_opt",
+     main="Amino Acid Composition Model")
+
+y <- merged$pheno_Topt_site_p50
+cors <- sapply(merged[, !c("ID","pheno_Topt_site_p50"), with=FALSE], function(x) cor(x, y))
+par(mfrow=c(1,1))
+hist(cors, main="correlations of embeddings with T_opt_site")
+
+high_cor <- cors[abs(cors) > 0.7]
+high_cor
+
+pca <- prcomp(X[,-1])
+pvar <- pca$sdev^2 * 100 / sum(pca$sdev^2) 
+barplot(pvar[1:10])
+plot(pca$x[,1],pca$x[,2])
+plot(pca$x[,3],pca$x[,4])
+plot(pca$x[,4],pca$x[,5])
+plot(pca$x[,6],pca$x[,7])
+
+
+
+
+
+
+
+
+dup_counts <- X[, .N, by=names(X)][N > 1]
+nrow(dup_counts)        # number of distinct duplicated rows
+sum(dup_counts$N)  
+
+plot(fit$fitted.values, merged$pheno_Topt_site_p50)
+
+train <- merge(df[Order != "Poales", .(ID, pheno_Topt_site_p50)], X, by.x="ID", by.y="sample_id")
+test  <- merge(df[Order == "Poales", .(ID, pheno_Topt_site_p50)], X, by.x="ID", by.y="sample_id")
+
+train_lm <- train[, !c("ID"), with=FALSE]
+test_lm  <- test[, !c("ID"), with=FALSE]
+
+fit <- lm(pheno_Topt_site_p50 ~ ., data=train_lm)
+s   <- summary(fit)$coefficients
+
+effects <- data.table(
+  predictor = rownames(s),
+  estimate  = s[, "Estimate"],
+  pval      = s[, "Pr(>|t|)"]
+)[predictor != "(Intercept)"]
+
+effects_by_size <- effects[order(-abs(estimate))]
+effects_by_pval <- effects[order(pval)]
+
+head(effects_by_size)
+head(effects_by_pval)
+
+pred <- predict(fit, newdata=test_lm)
+cor(pred, test$pheno_Topt_site_p50,method="spearman")
+plot(pred, test$pheno_Topt_site_p50)
+
+
+
+
+
 
 aln <- as.data.table(read_parquet("data/tmp/aa_supermatrix.parquet"))
 aln[1:10,1:10]

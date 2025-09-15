@@ -3,9 +3,7 @@ library(stringr)
 
 env_dir <- "data/geoDataOut"
 #recursively find all csv files in the directory and subdirectories
-csv_files <- list.files(env_dir, pattern = "\\.csv$", full.names = TRUE, recursive = TRUE)[1:10]
-
-dt <- fread(csv_files[1])
+csv_files <- list.files(env_dir, pattern = "\\.csv$", full.names = TRUE, recursive = TRUE)
 
 #define a function to process each file,
 # read the file, group by queryTerm, and calculate the 10th 50th and 90th percentiles of the value column
@@ -76,8 +74,8 @@ filtered_data <- data[which(data$n_occurrences > 4),]
 #o_hits <- unique(filtered_data$queryTerm)
 
 #hits <- intersect(g_hits, o_hits)
+cat(dim(filtered_data))
 
 fwrite(filtered_data, "data/pheno.csv")
 
-cat(dim(filtered_data))
 

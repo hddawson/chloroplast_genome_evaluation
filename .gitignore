@@ -13,5 +13,7 @@ jellyfish_output/*
 
 .RData
 .Rhistory
-
+*.rds
+*.pdf
+*.png
 *.tar.gz

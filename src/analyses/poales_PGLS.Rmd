@@ -1,0 +1,261 @@
+```{r setup, include=FALSE}
+# Load knitr
+library(knitr)
+library(ape)
+library(data.table)
+library(arrow)
+library(dplyr)
+library(caper)
+library(ape)
+library(nlme)
+library(geiger)
+
+# Set the working directory for all chunks
+opts_knit$set(root.dir = "/local/workdir/hdd29/chloroplast_genome_evaluation")
+```
+
+
+Load data
+
+```{r}
+data <- as.data.frame(read_parquet("data/processed_data.parquet"))
+tree <- read.tree("data/Fasttree/Fasttree.nwk")
+```
+
+```{r}
+poales_data <- data[grep(
+    "Poales", data$Taxonomy
+),]
+
+# Match tree to data
+poales_tree <- keep.tip(tree, poales_data$ID)
+
+# Ensure data order matches tree
+poales_data <- poales_data[match(poales_tree$tip.label, poales_data$ID), ]
+
+# Remove NAs
+complete_cases <- complete.cases(poales_data$pheno_Topt_site_p50)
+poales_data <- poales_data[complete_cases, ]
+poales_tree <- keep.tip(poales_tree, poales_data$ID)
+
+tip_colors <- rep("black", nrow(poales_data))  # default
+tip_colors[grepl("PACMAD",    poales_data$Taxonomy, ignore.case=TRUE)] <- "red"
+tip_colors[grepl("BOP",       poales_data$Taxonomy, ignore.case=TRUE)] <- "blue"
+tip_colors[grepl("Tillandsia",poales_data$Taxonomy, ignore.case=TRUE)] <- "green"
+tip_colors[grepl("Zea",       poales_data$Taxonomy, ignore.case=TRUE)] <- "orange"
+table(tip_colors)
+# Plot tree with colored tip labels
+plot(poales_tree, type="fan", tip.color=tip_colors, cex=0.1)
+```
+
+Now we have the data set up, let's fit a simple genomic model 
+
+```{r}
+
+aa_cols <- intersect(c("A","R","N","D","C","Q","E","G","H","I",
+                       "L","K","M","F","P","S","T","W","Y","V"),
+                     names(df))
+aa_cols_reduced <- setdiff(aa_cols, "A")  # Drop alanine as reference
+
+predictors <- c(aa_cols_reduced, "geno_genomeLength")
+
+form <- as.formula(paste("pheno_Topt_site_p50 ~", paste(predictors, collapse = "+")))
+
+
+fit <- lm(form, data=poales_data)
+plot(fit$fitted.values,poales_data$pheno_Topt_site_p50)
+
+summary(fit)
+```
+
+```{r}
+pred_data <- poales_data[, predictors]
+apply(pred_data, 2, var, na.rm=TRUE)  # Look for zero variance
+cor_matrix <- cor(pred_data, use="complete.obs")
+cor_matrix[abs(cor_matrix) > 0.99 & cor_matrix != 1]
+
+aa_data <- poales_data[, aa_cols_reduced]
+aa_pca <- prcomp(aa_data, scale=TRUE)
+pvar <- aa_pca$sdev^2 / sum(aa_pca$sdev^2)
+barplot(pvar)  # See how many PCs explain variance
+
+# Use first few PCs instead of raw amino acids
+n_pcs <- 15  # Adjust based on cumulative variance
+aa_pcs <- aa_pca$x[, 1:n_pcs]
+colnames(aa_pcs) <- paste0("AA_PC", 1:n_pcs)
+
+#poales_data <- cbind(poales_data, aa_pcs)
+#predictors <- c(paste0("AA_PC", 1:n_pcs), "geno_genomicGC", "geno_genomeLength")
+#form <- as.formula(paste("pheno_Topt_site_p50 ~", paste(predictors, collapse = "+")))
+```
+
+```{r}
+# Check for problematic tree structure
+is.ultrametric(poales_tree)  # Should be TRUE
+any(poales_tree$edge.length <= 0)  # Should be FALSE
+min(poales_tree$edge.length)  # Should be > 0
+
+is.rooted(poales_tree)
+
+# Fix zero and near-zero branches
+poales_tree_fixed <- poales_tree
+zero_branches <- poales_tree_fixed$edge.length == 0
+very_small <- poales_tree_fixed$edge.length < 1e-6
+
+cat("Fixing", sum(zero_branches), "zero branches and", 
+    sum(very_small), "very small branches\n")
+
+# Set minimum branch length
+min_branch <- 1e-6
+poales_tree_fixed$edge.length[poales_tree_fixed$edge.length < min_branch] <- min_branch
+
+# Verify fix
+summary(poales_tree_fixed$edge.length)
+sum(poales_tree_fixed$edge.length == 0)  # Should be 0
+```
+
+
+```{r}
+fit <- lm(form, dat=poales_data)
+summary(fit)
+poales_tree_fixed$node.label <- NULL
+poales_data <- poales_data[match(poales_tree_fixed$tip.label, poales_data$ID), ]
+# Use for PGLS
+cdat <- comparative.data(data = poales_data,
+                         phy = poales_tree_fixed,
+                         names.col = "ID", 
+                         vcv = TRUE, na.omit = FALSE, warn.dropped = TRUE)
+
+#m <- pgls(pheno_Topt_site_p50 ~ geno_genomicGC, data = cdat, lambda = "ML")
+m <- pgls(form, data = cdat, lambda = "ML")
+
+summary(m)
+```
+#COOL!!!!
+
+```{r}
+par(mfrow=c(1,2))
+
+plot(fit$fitted.values, poales_data$pheno_Topt_site_p50, 
+     main="T_opt ~ AA (OLS)",
+     xlab="OLS fitted values",
+     ylab="Observed values")
+abline(0,1)
+is_tillandsia <- grepl("Tillandsia", poales_data$Taxonomy)
+points(fit$fitted.values[is_tillandsia], poales_data$pheno_Topt_site_p50[is_tillandsia], col="green")
+cor(fit$fitted.values, poales_data$pheno_Topt_site_p50, method="spearman")
+plot(m$fitted, poales_data$pheno_Topt_site_p50, 
+     main="T_opt ~ AA (PGLS)",
+     xlab="PGLS fitted values",
+     ylab="Observed values")
+
+points(m$fitted[is_tillandsia], poales_data$pheno_Topt_site_p50[is_tillandsia], col="green")
+cor(m$fitted, poales_data$pheno_Topt_site_p50, method="spearman")
+abline(0,1)
+```
+
+Let's make the autocorrellogram 
+```{r}
+rownames(poales_data) <- poales_data$ID
+
+# convert to phylo4d object
+p4d <- phylo4d(poales_tree_fixed, poales_data$pheno_Topt_site_p50)
+
+# check it
+p4d
+```
+
+
+```{r, fig.width=6, fig.height=4}
+barplot.phylo4d(p4d, tree.type = "phylo", tree.ladderize = TRUE)
+```
+
+```{r}
+psig <- phyloSignal(p4d = p4d, method = "all")
+crlgm <- phyloCorrelogram(p4d, ci.bs=1)
+```
+
+```{r}
+# required packages
+library(ape)
+library(adephylo)   # for abouheif.moran and proxTips
+# optional: library(phylobase) if you prefer phylo4d
+tree <- poales_tree_fixed
+trait <- poales_data$pheno_Topt_site_p50
+# Assume `tree` is an ape phylo and `trait` is a named numeric vector with names(tree$tip.label)
+stopifnot(all(names(trait) == tree$tip.label) | all(tree$tip.label %in% names(trait)))
+
+# 1. compute patristic distances
+pat <- cophenetic.phylo(tree)         # symmetric matrix of tip distances
+
+# 2. set up distance classes (choose sensible bins)
+# e.g. 8-12 bins; adjust depending on tree depth and n tips
+n.classes <- 12
+d.vec <- as.numeric(pat[upper.tri(pat)])
+breaks <- quantile(d.vec, probs = seq(0, 1, length.out = n.classes + 1))
+# avoid zero-width bins by jittering if necessary
+breaks <- unique(breaks)
+if(length(breaks) < 3) stop("too few unique distances; reduce n.classes")
+
+# 3. compute Moran's I (Abouheif's test) for each class
+moran.results <- vector("list", length = length(breaks)-1)
+names(moran.results) <- paste0("class_", seq_len(length(breaks)-1))
+
+for(i in seq_len(length(breaks)-1)){
+  lo <- breaks[i]
+  hi <- breaks[i+1]
+  # W: proximity matrix with positive entries for pairs whose patristic distance falls in [lo,hi)
+  W <- matrix(0, nrow = nrow(pat), ncol = ncol(pat), dimnames = dimnames(pat))
+  idx <- which(pat >= lo & pat < hi, arr.ind = TRUE)
+  if(nrow(idx) > 0){
+    for(r in seq_len(nrow(idx))){
+      W[idx[r,1], idx[r,2]] <- 1
+      W[idx[r,2], idx[r,1]] <- 1
+    }
+  }
+  # if W is all zeros for a class, skip
+  if(all(W == 0)){
+    moran.results[[i]] <- NA
+    next
+  }
+  # abouheif.moran expects a data.frame of traits; rownames must match W
+  df <- as.data.frame(trait)
+  rownames(df) <- names(trait)
+  # run test (adjust nrepet as you like)
+  moran.results[[i]] <- abouheif.moran(df, W = W, nrepet = 999, alter = "greater")
+}
+
+# 4. extract Moran's I and p-values, plot correlogram
+I <- sapply(moran.results, function(x) if(is.na(x)) NA else x$obs[1])    # observed stat
+pval <- sapply(moran.results, function(x) if(is.na(x)) NA else x$pvalue[1])
+
+# midpoints for plotting
+mid <- (breaks[-1] + breaks[-length(breaks)]) / 2
+plot(mid, I, type = "b", pch = 16, xlab = "patristic distance (class midpoint)", ylab = "Moran's I (Abouheif)")
+abline(h = 0, lty = 2)
+points(mid, I, col = ifelse(pval < 0.05, "red", "black"))
+legend("topright", legend = c("p < 0.05"), pch = 16, col = "red", bty = "n")
+
+```
+
+
+
+```{r}
+
+# --- Blomberg’s K ---
+p_sig <- phyloSignal(p4d, method = "all", reps <- 10)
+print(K_res)
+
+# --- Moran’s I ---
+I_res <- phylosig(poales_tree_fixed, traits, method = "I", test = TRUE)
+print(I_res)
+
+# --- correlogram ---
+corr_res <- phyloCorrelogram(traits, poales_tree_fixed, nclass = 10, method = "I")
+plot(corr_res)
+```
+
+
+
+
+

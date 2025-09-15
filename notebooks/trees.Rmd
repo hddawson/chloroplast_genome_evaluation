@@ -4,18 +4,19 @@ output: html_notebook
 editor_options: 
   chunk_output_type: inline
 ---
-
-
-```{r}
+```{r setup, include=FALSE}
+# Load knitr
+library(knitr)
 library(ape)
 library(data.table)
 library(arrow)
-setwd("/workdir/hdd29/chloroplast_genome_evaluation")
+# Set the working directory for all chunks
+opts_knit$set(root.dir = "/local/workdir/hdd29/chloroplast_genome_evaluation")
 ```
 
 ```{r}
 
-data <- as.data.table(read_parquet("data/processed_data.parquet"))
+data <- as.data.table(read_parquet("/workdir/hdd29/chloroplast_genome_evaluation/data/processed_data.parquet"))
 
 barplot(table(data$Order))
 head(data$ID)
@@ -28,7 +29,16 @@ cat("Number of nodes:", Nnode(ftree), "\n")
 head(ftree$tip.label)
 summary(ftree$edge.length)
 
+edge_order <- order(ftree$edge.length, decreasing = TRUE)
+child_nodes <- ftree$edge[edge_order, 2]
+tip_edges <- child_nodes[child_nodes <= Ntip(ftree)]
 
+
+tip_ids <- ftree$tip.label[tip_edges]
+
+longest_tips <- data[ID %in% tip_ids, .(ID, Organism)][match(tip_ids, ID)]
+
+head(longest_tips, 20)
 ```
 ```{r}
 set.seed(123)
@@ -54,7 +64,53 @@ for (o in orders) {
 
 ```
 
-So there is a decent mix of monophyly here. Some clades really are, others are not. About 2/3 of the orders are not monophyletic. 
+So there is a decent mix of monophyly here. Some clades really are, others are not. About 2/3 of the orders are not monophyletic. Let's root the tree. Pinales is the outgroup here
+```{r}
+is.rooted(ftree)
+
+gymno_orders <- c("Pinales", "Cupressales")
+gymno_ids <- data[Order %in% gymno_orders, ID]
+gymno_in_tree <- gymno_ids[gymno_ids %in% ftree$tip.label]
+
+cat("Total gymno tips:", length(gymno_in_tree), "\n")
+
+# Check if gymnosperms together are monophyletic
+is_gymno_mono <- is.monophyletic(ftree, gymno_in_tree)
+cat("Are all gymnosperms together monophyletic?", is_gymno_mono, "\n")
+
+gymno_mrca <- getMRCA(ftree, gymno_in_tree)
+ftree_rooted <- root(unroot(ftree), node = gymno_mrca,keep.root.edge=TRUE)
+is.rooted(ftree_rooted)
+
+set.seed(123)
+subtree <- keep.tip(ftree_rooted, sample(ftree_rooted$tip.label, 1000))
+plot(subtree, show.tip.label=FALSE, type="p")
+```
+```{r}
+poales_ids <- data[Order == "Poales", ID]
+poales_in_tree <- poales_ids[poales_ids %in% ftree$tip.label]
+
+poales_tree <- drop.tip(ftree, setdiff(ftree$tip.label, poales_in_tree))
+
+tip_labels <- data[match(poales_tree$tip.label, data$ID), Organism]
+poales_tree$tip.label <- tip_labels
+
+pdf("plots/poales_tree.pdf", width = 3, height = 50)
+plot(poales_tree, cex = 0.3, no.margin = TRUE)
+dev.off()
+
+```
+
+
+
+
+```{r}
+pdf("/workdir/hdd29/chloroplast_genome_evaluation/plots/full_tree_rooted.pdf", height = 300, width = 20)
+plot(ftree_rooted, show.tip.label=FALSE, type="p")
+dev.off()
+```
+
+
 
 ```{r}
 fabs_ids <- data[Order == "Fabales", ID]
@@ -71,6 +127,8 @@ cat("Non-fabales tips in fabales clade:", length(intruders), "\n")
 ```
 
 ```{r}
+setwd("/workdir/hdd29/chloroplast_genome_evaluation")
+
 pdf("plots/fabales_tree.pdf", width=12, height=12)
 
 fabales_ids <- data[Order == "Fabales", ID]
@@ -83,10 +141,9 @@ sample_fabales <- sample(fabales_in_tree, min(100, length(fabales_in_tree)))  # 
 subsample_tips <- c(sample_other, sample_fabales)
 subtree <- keep.tip(ftree, subsample_tips)
 
-# Create color vector
-tip_colors <- rep("black", Ntip(subtree))
-tip_colors[subtree$tip.label %in% fabales_in_tree] <- "red"
-
+fabales_in_subtree <- subtree$tip.label[subtree$tip.label %in% fabales_in_tree]
+tip_colors <- ifelse(subtree$tip.label %in% fabales_in_subtree, "red", "black")
+table(tip_colors)
 # Plot with colored tips
 plot(subtree, show.tip.label=FALSE, type="fan", 
     tip.color=tip_colors, cex=1.5)
