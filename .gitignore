@@ -17,3 +17,4 @@ jellyfish_output/*
 *.pdf
 *.png
 *.tar.gz
+dataset

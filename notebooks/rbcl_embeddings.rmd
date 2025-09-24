@@ -1,0 +1,418 @@
+---
+title: "rbcL_embeddings"
+output: html_document
+date: "2025-09-18"
+---
+
+```{r setup, include=FALSE}
+library(data.table)
+library(parallel)
+library(arrow)
+library(ggplot2)
+library(pheatmap)
+library(scatterplot3d)
+```
+
+```{r load data}
+df<- as.data.table(read_parquet("/workdir/hdd29/chloroplast_genome_evaluation/data/processed_data.parquet"))
+X <- as.data.table(read_parquet("/workdir/hdd29/chloroplast_genome_evaluation/data/rbcL_embeddings.parquet"))
+merged <- merge(df[, .(ID, pheno_Topt_site_p50)], X, by.x="ID", by.y="sample_id")
+```
+
+
+
+```{r echo=FALSE}
+#Do this offline:
+#mds_result <- cmdscale(dist_matrix, k=2)
+#saveRDS(mds_result, "results/mds_result.rds")
+mds_result <- as.data.frame(readRDS("/workdir/hdd29/chloroplast_genome_evaluation/results/mds_result.rds"))
+
+mds_df <- data.frame(
+  MDS1 = mds_result[,1],
+  MDS2 = mds_result[,2],
+  sample_id = X$sample_id
+)
+
+d <- sqrt(rowSums(scale(mds_df[,c("MDS1","MDS2")], center=TRUE, scale=FALSE)^2))
+z <- scale(d)
+outliers <- mds_df$sample_id[abs(z) > 3]
+sum(z>3)
+mds_df$is_outlier <- abs(z) > 4
+
+ggplot(mds_df, aes(x = MDS1, y = MDS2)) +
+  geom_point(aes(color = is_outlier), size = 1.5) +
+  geom_text(data = subset(mds_df, is_outlier),
+            aes(label = sample_id),
+            hjust = 0, nudge_x = 0.01, size = 3) +
+  scale_color_manual(values = c("black", "red")) +
+  labs(title = "MDS of rbcL Embeddings, outliers have z-score of dist from centroid >5", color = "Outlier") +
+  theme_minimal()
+```
+D
+## Including Plots
+```{r drop outliers}
+embedding_cols <- names(X)[names(X) != "sample_id"]
+outlier_samples <- mds_df[mds_df$is_outlier, "sample_id"]
+keep_idx <- !X$sample_id %in% outlier_samples
+X_clean <- X[keep_idx, ]
+embedding_matrix_clean <- as.matrix(X_clean[, ..embedding_cols])
+dim(embedding_matrix_clean)
+```
+
+```{r}
+cor_matrix <- cor(embedding_matrix_clean)
+pheatmap(cor_matrix)
+hist(cor_matrix)
+```
+
+You can also embed plots, for example:
+
+```{r}
+pheno_cols <- colnames(df)[grep("pheno", colnames(df))]
+res <- rbindlist(lapply(pheno_cols, function(p) {
+  m <- merge(df[, c("ID", p), with=FALSE], X_clean, by.x="ID", by.y="sample_id")
+  y <- m[[p]]
+  cors <- sapply(m[, !c("ID", p), with=FALSE], function(x) cor(x, y, use="pairwise.complete.obs"))
+  data.table(pheno=p, embedding=names(cors), cor=cors)
+}))
+```
+
+```{r}
+mat <- dcast(res, embedding ~ pheno, value.var="cor")
+embeddings <- mat$embedding
+mat <- as.matrix(mat[,-1])
+rownames(mat) <- embeddings
+
+bio_names <- c(
+  "bio_1"="Annual Mean Temperature",
+  "bio_2"="Mean Diurnal Range",
+  "bio_3"="Isothermality (BIO2/BIO7 ×100)",
+  "bio_4"="Temperature Seasonality (SD×100)",
+  "bio_5"="Max Temp of Warmest Month",
+  "bio_6"="Min Temp of Coldest Month",
+  "bio_7"="Temperature Annual Range (BIO5-BIO6)",
+  "bio_8"="Mean Temp of Wettest Quarter",
+  "bio_9"="Mean Temp of Driest Quarter",
+  "bio_10"="Mean Temp of Warmest Quarter",
+  "bio_11"="Mean Temp of Coldest Quarter",
+  "bio_12"="Annual Precipitation",
+  "bio_13"="Precipitation of Wettest Month",
+  "bio_14"="Precipitation of Driest Month",
+  "bio_15"="Precipitation Seasonality (CV)",
+  "bio_16"="Precipitation of Wettest Quarter",
+  "bio_17"="Precipitation of Driest Quarter",
+  "bio_18"="Precipitation of Warmest Quarter",
+  "bio_19"="Precipitation of Coldest Quarter"
+)
+
+labels <- sub(".*(bio_\\d+).*","\\1",colnames(df))
+labels <- ifelse(grepl("bio_",labels), bio_names[labels], labels)
+
+col_labels <- sub(".*(bio_\\d+)_p(\\d+).*","\\1_p\\2",colnames(mat))
+col_labels <- ifelse(grepl("bio_",col_labels),
+                     paste0(bio_names[sub("(bio_\\d+)_.*","\\1",col_labels)],
+                            " (p",sub(".*_p(\\d+)","\\1",col_labels),")"),
+                     col_labels)
+
+pheatmap(mat, cluster_rows=TRUE, cluster_cols=TRUE, labels_col=col_labels)
+```
+
+```{r}
+# Get orders with n>50
+order_counts <- table(df$Order)
+large_orders <- names(order_counts)[order_counts > 50]
+#is all the orders :) 
+
+# Calculate correlations for each order separately
+order_cors <- rbindlist(lapply(large_orders, function(order) {
+  # Subset data for this order
+  df_order <- df[Order == order]
+  
+  # Get correlation results for this order
+  order_res <- rbindlist(lapply(pheno_cols, function(p) {
+    m <- merge(df_order[, c("ID", p), with=FALSE], X_clean, by.x="ID", by.y="sample_id")
+    if(nrow(m) < 10) return(NULL)  # Skip if too few samples
+    
+    y <- m[[p]]
+    cors <- sapply(m[, !c("ID", p), with=FALSE], function(x) cor(x, y, use="pairwise.complete.obs"))
+    data.table(Order=order, pheno=p, embedding=names(cors), cor=cors, n=nrow(m))
+  }))
+  
+  return(order_res)
+}))
+
+# Check stability - calculate coefficient of variation for each pheno-embedding pair
+stability <- order_cors[, .(
+  mean_cor = mean(cor, na.rm=TRUE),
+  sd_cor = sd(cor, na.rm=TRUE),
+  cv_cor = sd(cor, na.rm=TRUE) / abs(mean(cor, na.rm=TRUE)),
+  n_orders = .N
+), by=.(pheno, embedding)]
+
+# Show most/least stable correlations
+head(stability[order(-cv_cor)], 10)  # Least stable
+head(stability[order(cv_cor)], 10)   # Most stable
+```
+
+```{r}
+hist(stability$sd_cor, main="SD of cor(embedding x pheno) across orders, phenotypes")
+plot(stability$sd_cor,stability$mean_cor,
+     xlab= "SD of cor(embedding x pheno) across orders",
+     ylab= "Mean cor(embedding x pheno) across orders",
+     main="SD vs Mean of embedding x phenotype correlation across orders")
+```
+
+So we have this kind of left skewed balloon distribution. It is not the case there is a variant with a strong effect, but a small sample correlation 
+
+
+```{r}
+plot(stability[grep("_8_p50", stability$pheno),]$sd_cor,stability[grep("_8_p50", stability$pheno),]$mean_cor,
+     xlab= "SD of cor(embedding x bio8_p50) across orders",
+     ylab= "Mean cor(embedding x bio8_p50) across orders",
+     main="SD vs Mean of embedding x bio8_p50 correlation across orders")
+```
+So the bio8 pheno looks pretty comparable to the overall distribtuion. Let's see how they all compare to poales
+
+```{r}
+# Split data: Poales vs everything else
+poales_data <- df[Order == "Poales"]
+non_poales_data <- df[Order != "Poales"]
+
+# Calculate correlations for non-Poales data
+non_poales_res <- rbindlist(lapply(pheno_cols, function(p) {
+  m <- merge(non_poales_data[, c("ID", p), with=FALSE], X_clean, by.x="ID", by.y="sample_id")
+  if(nrow(m) < 10) return(NULL)
+  
+  y <- m[[p]]
+  cors <- sapply(m[, !c("ID", p), with=FALSE], function(x) cor(x, y, use="pairwise.complete.obs"))
+  data.table(dataset="Non-Poales", pheno=p, embedding=names(cors), cor=cors, n=nrow(m))
+}))
+
+
+# Calculate correlations for Poales data
+poales_res <- rbindlist(lapply(pheno_cols, function(p) {
+  m <- merge(poales_data[, c("ID", p), with=FALSE], X_clean, by.x="ID", by.y="sample_id")
+  if(nrow(m) < 10) return(NULL)
+  
+  y <- m[[p]]
+  cors <- sapply(m[, !c("ID", p), with=FALSE], function(x) cor(x, y, use="pairwise.complete.obs"))
+  data.table(dataset="Poales", pheno=p, embedding=names(cors), cor=cors, n=nrow(m))
+}))
+
+# Combine and compare
+comparison <- rbind(non_poales_res, poales_res)
+comparison_wide <- dcast(comparison, pheno + embedding ~ dataset, value.var="cor")
+
+# Show biggest differences
+comparison_wide[, diff := abs(Poales - `Non-Poales`)]
+head(comparison_wide[order(-diff)], 20)
+hist(comparison_wide$diff)
+# Scatter plot comparison
+plot(comparison_wide$`Non-Poales`, comparison_wide$Poales, 
+     xlab="Non-Poales Correlation", ylab="Poales Correlation")
+
+cor(comparison_wide$`Non-Poales`, comparison_wide$Poales)
+abline(0,1, col="red")
+```
+Looks Linny! With a little bit of spread 
+```{r}
+highlight_pheno <- "pheno_Topt_site_p50"
+overall_cor <- cor(comparison_wide$`Non-Poales`, comparison_wide$Poales)
+topt_cor <-  cor(comparison_wide$`Non-Poales`[comparison_wide$pheno == highlight_pheno], 
+       comparison_wide$Poales[comparison_wide$pheno == highlight_pheno])
+plot(comparison_wide$`Non-Poales`, comparison_wide$Poales, 
+     xlab="Non-Poales Correlation", ylab="Poales Correlation",
+     main = paste0("Embedding-Phenotype Correlations: Poales vs Non-Poales\n",
+                   "Overall r = ", round(overall_cor, 3), " Topt_p50 r = ", round(topt_cor, 3)),
+     col = "black", pch = 1)
+abline(0,1, col="blue", lwd=2)
+points(comparison_wide$`Non-Poales`[comparison_wide$pheno == highlight_pheno], 
+       comparison_wide$Poales[comparison_wide$pheno == highlight_pheno],
+       col="red", pch=16, cex=1.2)
+
+legend("topleft", 
+       legend = c("Other phenotypes", highlight_pheno),
+       col = c("black", "red"),
+       pch = c(1, 16),
+       bty = "n")
+```
+```{r}
+
+tOpt_compar <- comparison_wide[grep("_site_p50", comparison_wide$pheno)]
+# Find the 10 best predictors (close to y=x line with high correlation)
+tOpt_compar[, distance_from_line := abs(Poales - `Non-Poales`)]
+best_predictors <- tOpt_compar[abs(Poales) > 0.1 & abs(`Non-Poales`) > 0.1][
+  order(distance_from_line)][1:10]
+
+print("Best 10 predictors:")
+print(best_predictors[, .(pheno, embedding, Poales, `Non-Poales`, distance_from_line)])
+
+# Get embedding columns for these predictors
+predictor_embeddings <- best_predictors$embedding
+
+# Prepare data for modeling
+model_data <- merge(df[, .(ID, pheno_Topt_site_p50)], X_clean, by.x="ID", by.y="sample_id")
+model_data <- model_data[!is.na(pheno_Topt_site_p50)]
+
+# Extract predictor matrix
+X_predictors <- as.matrix(model_data[, predictor_embeddings, with=FALSE])
+y <- model_data$pheno_Topt_site_p50
+
+# Fit model
+model <- lm(y ~ X_predictors)
+summary(model)
+
+# Check predictions
+pred <- predict(model)
+plot(pred, y, xlab="Predicted Topt", ylab="Observed Topt")
+abline(0,1, col="red")
+cat("R-squared:", summary(model)$r.squared, "\n")
+```
+
+```{r}
+# Split data: training (non-Poales) and test (Poales)
+train_data <- merge(df[Order != "Poales", .(ID, pheno_Topt_site_p50)], 
+                    X_clean, by.x="ID", by.y="sample_id")
+test_data <- merge(df[Order == "Poales", .(ID, pheno_Topt_site_p50)], 
+                   X_clean, by.x="ID", by.y="sample_id")
+
+train_data <- train_data[!is.na(pheno_Topt_site_p50)]
+test_data <- test_data[!is.na(pheno_Topt_site_p50)]
+
+# Fit model on training data (non-Poales)
+X_train <- as.matrix(train_data[, predictor_embeddings, with=FALSE])
+y_train <- train_data$pheno_Topt_site_p50
+model_train <- lm(y_train ~ X_train)
+
+# Predict on both datasets
+pred_train <- predict(model_train)
+X_test <- as.matrix(test_data[, predictor_embeddings, with=FALSE])
+pred_test <- X_test %*% coef(model_train)[-1] + coef(model_train)[1]
+y_test <- test_data$pheno_Topt_site_p50
+
+# Plot results
+par(mfrow=c(1,2))
+
+# Training data
+plot(pred_train, y_train, xlab="Predicted Topt", ylab="Observed Topt", 
+     main="Training (Non-Poales)", pch=16, col="blue")
+abline(0,1, col="red")
+r2_train <- cor(pred_train, y_train)^2
+text(min(pred_train), max(y_train), paste("R² =", round(r2_train, 3)), pos=4)
+
+# Test data (Poales)
+plot(pred_test, y_test, xlab="Predicted Topt", ylab="Observed Topt",
+     main="Test (Poales)", pch=16, col="green")
+abline(0,1, col="red")
+r2_test <- cor(pred_test, y_test)^2
+text(min(pred_test), max(y_test), paste("R² =", round(r2_test, 3)), pos=4)
+cat("Training R²:", round(r2_train, 3), "\n")
+cat("Test R²:", round(r2_test, 3), "\n")
+```
+That's not great 
+
+```{r}
+# Get the predictor embeddings and phenotype
+predictor_embeddings <- best_predictors$embedding
+target_pheno <- "pheno_Topt_site_p50"
+
+# Prepare data
+plot_data <- merge(df[, c("ID", target_pheno), with=FALSE], X_clean, by.x="ID", by.y="sample_id")
+plot_data <- plot_data[!is.na(get(target_pheno))]
+
+# Set up plotting grid
+n_predictors <- length(predictor_embeddings)
+par(mfrow=c(1, 1))  # 4x5 grid for 20 predictors
+
+# Plot each predictor vs phenotype
+for(i in 1:n_predictors) {
+  emb <- predictor_embeddings[i]
+  x_vals <- plot_data[[emb]]
+  y_vals <- plot_data[[target_pheno]]
+  
+  plot(x_vals, y_vals, 
+       xlab=paste("Embedding", emb),
+       ylab="Topt site p50",
+       main=paste("r =", round(cor(x_vals, y_vals, use="complete.obs"), 3)),
+       pch=16, cex=0.5)
+  abline(lm(y_vals ~ x_vals), col="red")
+}
+```
+
+```{r}
+plot_data <- merge(df[, c("ID", "pheno_Topt_site_p50"), with=FALSE], X_clean, by.x="ID", by.y="sample_id")
+plot_data <- plot_data[!is.na(pheno_Topt_site_p50)]
+
+model <- lm(pheno_Topt_site_p50 ~ `313` + `507`, data=plot_data)
+summary(model)
+
+# Check predictions
+pred <- predict(model)
+plot(pred, plot_data$pheno_Topt_site_p50, 
+     xlab="Predicted Topt", ylab="Observed Topt",
+     main=paste("Two-embedding model, R² =", round(summary(model)$r.squared, 3)))
+abline(0,1, col="red")
+```
+ 
+```{r}
+# Get the two embeddings and Topt data
+plot_data <- merge(df[, c("ID", "pheno_Topt_site_p50"), with=FALSE], X_clean, by.x="ID", by.y="sample_id")
+plot_data <- plot_data[!is.na(pheno_Topt_site_p50)]
+
+# Extract the three variables
+x1 <- plot_data$`313`
+x2 <- plot_data$`507`
+y <- plot_data$pheno_Topt_site_p50
+
+s3d <- scatterplot3d(x1, x2, y,
+                     xlab="Embedding 313", 
+                     ylab="Embedding 507", 
+                     zlab="Topt site p50",
+                     pch=16, 
+                     color="blue",  # This is the correct parameter name
+                     main="3D: Embeddings 313 & 507 vs Topt")
+
+# Add regression plane
+model <- lm(y ~ x1 + x2)
+s3d$plane3d(model, col="red")
+```
+ 
+```{r}
+library(rgl)
+
+# Create interactive 3D plot
+plot3d(x1, x2, y, 
+       xlab="Embedding 313", 
+       ylab="Embedding 507", 
+       zlab="Topt site p50",
+       col="blue", 
+       size=5)
+
+# Add regression plane
+model <- lm(y ~ x1 + x2)
+coefs <- coef(model)
+
+# Create grid for plane
+x1_range <- range(x1)
+x2_range <- range(x2)
+x1_seq <- seq(x1_range[1], x1_range[2], length=20)
+x2_seq <- seq(x2_range[1], x2_range[2], length=20)
+z_plane <- outer(x1_seq, x2_seq, function(a,b) coefs[1] + coefs[2]*a + coefs[3]*b)
+
+# Add plane
+surface3d(x1_seq, x2_seq, z_plane, alpha=0.3, col="red")
+
+plot_data_3d <- list(
+  x1 = x1,
+  x2 = x2,
+  y = y,
+  model_coefs = coef(model),
+  x1_range = range(x1),
+  x2_range = range(x2)
+)
+
+saveRDS(plot_data_3d, "/workdir/hdd29/chloroplast_genome_evaluation/data/tmp/3d_plot_data.rds")
+```
+
+
+

@@ -103,7 +103,7 @@ pval <- sapply(moran.results, function(x) {
 
 # midpoints for plotting
 mid <- (breaks[-1] + breaks[-length(breaks)]) / 2
-png("plots/spermatophyta_correlogram.png", width = 10, height = 10, units = "in", res = 300)
+png("plots/spermatophyta_correlogram.png", width = 40, height = 10, units = "in", res = 300)
 plot(mid, I, type = "b", pch = 16,
      main="Spermatophyte phylogenetic signal",
      xlab = "patristic distance (class midpoint)", ylab = "Moran's I (Abouheif)")

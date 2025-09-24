@@ -1,0 +1,478 @@
+---
+title: "find poairs for rotholog contrast"
+output:
+  pdf_document: default
+  html_notebook: default
+editor_options:
+  chunk_output_type: inline
+---
+```{r setup, include=FALSE}
+# Load knitr
+library(knitr)
+library(data.table)
+library(arrow)
+# Set the working directory for all chunks
+opts_knit$set(root.dir = "/local/workdir/hdd29/chloroplast_genome_evaluation")
+```
+
+We can read in the embedding file, which has the outlier protein sequences detected by manual inspection of MDS plots
+
+```{r}
+embeds <- readRDS("data/tmp/embeds_with_mds.rds")
+table(embeds$ManualOutlier)
+dim(embeds)
+embed_cols <- grep("embedding", colnames(embeds), value=TRUE)
+
+clean_embeds <- embeds[ManualOutlier == FALSE]
+head(clean_embeds[,1:5])
+#write_parquet(clean_embeds, "data/clean_embeds.parquet")
+
+#clean_seq <- clean_embeds[,c("ID", "Taxonomy", "Gene", "AA_seq")]
+#write_parquet(clean_seq, "data/clean_AA_seqs.parquet")
+#head(clean_seq)
+```
+And now we can read in the data with phenotypic values 
+
+```{r}
+df <- read_parquet("data/processed_data.parquet")
+setDT(df)
+
+#pheno <- clean_data[,c("ID", "pheno_Topt_site_p50")]
+  
+#write_parquet(pheno, "data/pheno_topt_clean.parquet")
+
+```
+
+Now, in the meantime, I wish to analyze the correlation between the embeddings and my phenotypes. 
+```{r}
+genes <- unique(clean_embeds$Gene)
+all_cors <- list()
+for (gene in genes) {
+  gene_data <- clean_embeds[grep(gene, clean_embeds$Gene),]
+  pheno <- df[,c("ID", "pheno_wc2.1_2.5m_bio_8_p50")]
+  
+  gene_data <- merge(gene_data, pheno, by="ID")
+  
+  cors <- sapply(embed_cols, function(col)
+    cor(gene_data[[col]], gene_data$pheno_wc2.1_2.5m_bio_8_p50, use="complete.obs")
+  )
+  hist(cors, main=gene)
+  all_cors[[gene]] <- cors
+}
+
+```
+
+```{r}
+par(mfrow=c(1,2))
+hist(all_cors$psbN, main="Cor of psbN embeds with bio8")
+hist(all_cors$rbcL, main="rbcL")
+```
+```{r}
+gene_data <- clean_embeds[grep("psaC", clean_embeds$Gene),]
+par(mfrow=c(1,2))
+hist(gene_data$MDS1)
+plot(gene_data$MDS1, gene_data$MDS2, main="psaC MDS results")
+#hist(gene_data$MDS2)
+par(mfrow=c(1,1))
+for (ord in unique(df$Order)) {
+  order_ids <- df[grep(ord, df$Order),"ID"]
+  order_subset <- gene_data[gene_data$ID %in% order_ids$ID, ]
+  hist(order_subset$MDS1,main=ord,xlim=c(-.1,.1))
+}
+```
+```{r}
+gene_data <- clean_embeds[grep("psaC", clean_embeds$Gene),]
+merged <- merge(gene_data, df[,c("ID","Order")], by="ID")
+
+boxplot(MDS1 ~ Order, data=merged,
+        main="psaC MDS1 by Order",
+        las=2, outline=FALSE)
+```
+```{r}
+library(pheatmap)
+mat <- do.call(rbind, all_cors)
+rownames(mat) <- names(all_cors)
+pheatmap(mat, color=colorRampPalette(c("blue","white","red"))(100))
+```
+```{r}
+# build correlation matrix: genes x embedding dimensions
+mat <- do.call(rbind, all_cors)
+rownames(mat) <- names(all_cors)
+
+# similarity between genes: correlation of their correlation profiles
+gene_sim <- cor(t(mat), use="pairwise.complete.obs")
+
+# hierarchical clustering heatmap
+pheatmap(gene_sim, 
+         main="Similarity of gene embeddings wrt bio8",
+         color=colorRampPalette(c("blue","white","red"))(100))
+
+hist(gene_sim)
+```
+
+```{r}
+offdiag <- gene_sim[upper.tri(gene_sim)]
+
+hist(offdiag, breaks=30,
+     main="Stability of embedding correlations across genes",
+     xlab="Pairwise correlation",
+     col="skyblue")
+abline(v=mean(offdiag, na.rm=TRUE), col="red", lwd=2)
+```
+
+```{r}
+hist(length(clean_embeds$psaC_CDS)/3)
+```
+```{r}
+mat <- do.call(rbind, all_cors)
+rownames(mat) <- names(all_cors)
+
+# per-embedding stats across genes
+embed_stats <- data.frame(
+  dim = colnames(mat),
+  mean_cor = apply(mat, 2, mean, na.rm=TRUE),
+  mean_abs_cor = apply(mat, 2, function(x) mean(abs(x), na.rm=TRUE)),
+  sd_cor = apply(mat, 2, sd, na.rm=TRUE)
+)
+
+plot(embed_stats$mean_cor, embed_stats$sd_cor,
+     xlab="mean of correlation across genes",
+     ylab="sd of correlation across genes")
+abline(a=0,b=1)
+# pick embedding with strongest + most stable signal
+best <- embed_stats[order(-embed_stats$mean_abs_cor, embed_stats$sd_cor), ][1, ]
+best
+```
+
+```{r}
+library(stats)
+
+results <- list()
+for (gene in genes) {
+  gene_data <- clean_embeds[Gene == gene]
+  pheno <- df[,c("ID","pheno_wc2.1_2.5m_bio_8_p50")]
+  merged <- merge(gene_data, pheno, by="ID")
+  
+  cors <- sapply(embed_cols, function(col)
+    cor(merged[[col]], merged$pheno_wc2.1_2.5m_bio_8_p50, use="complete.obs"))
+  
+  top_dims <- names(sort(abs(cors), decreasing=TRUE))[1:5]
+  formula_str <- paste("pheno_wc2.1_2.5m_bio_8_p50 ~", paste(top_dims, collapse=" + "))
+  fit <- lm(as.formula(formula_str), data=merged)
+  
+  plot(fit$fitted.values, merged$pheno_wc2.1_2.5m_bio_8_p50)
+  
+  results[[gene]] <- list(
+    cors=cors,
+    top_dims=top_dims,
+    model=summary(fit)
+  )
+}
+
+results$psaC$top_dims
+results$psaC$model
+
+```
+
+
+```{r}
+# per-gene variable selection and building a combined design matrix
+library(data.table)
+library(stats)
+
+# ensure data.tables
+setDT(clean_embeds)
+setDT(df)
+
+# phenotype column name (adjust if you want a different pheno)
+pheno_col <- "pheno_wc2.1_2.5m_bio_8_p50"
+
+# number of top dims per gene
+n_top <- 5
+
+# container for per-gene selected data.tables (ID + renamed top embeds)
+sel_list <- vector("list", length(genes))
+names(sel_list) <- genes
+
+for (gene in genes) {
+  # subset gene
+  gdt <- clean_embeds[Gene == gene, c("ID", embed_cols), with = FALSE]
+  # merge with phenotype (inner join to ensure measurable correlation)
+  gdt <- merge(gdt, df[, .(ID, pheno = get(pheno_col))], by = "ID", all.x = FALSE, all.y = FALSE)
+  # if too few rows, skip (or store NA)
+  if (nrow(gdt) < 5) {
+    warning(sprintf("Gene %s has only %d rows; skipping.", gene, nrow(gdt)))
+    next
+  }
+  # compute correlations (use complete.obs)
+  cors <- sapply(embed_cols, function(col) cor(gdt[[col]], gdt$pheno, use = "complete.obs"))
+  # pick top dims by absolute correlation (handle if fewer than n_top dims available)
+  available <- names(cors)[!is.na(cors)]
+  k <- min(n_top, length(available))
+  top_dims <- names(sort(abs(cors[available]), decreasing = TRUE))[1:k]
+  # select ID + these dims and rename dims to gene__dim
+  sel <- gdt[, c("ID", top_dims), with = FALSE]
+  newnames <- setNames(top_dims, paste0(gene, "__", top_dims))
+  setnames(sel, old = top_dims, new = paste0(gene, "__", top_dims))
+  # keep only ID + renamed columns (drop phenotype copy)
+  sel <- sel[, c("ID", names(newnames)), with = FALSE]
+  sel_list[[gene]] <- sel
+}
+
+# remove genes we skipped
+sel_list <- sel_list[!sapply(sel_list, is.null)]
+
+# merge all per-gene tables by ID, keeping only IDs present in ALL (intersection)
+if (length(sel_list) == 0) stop("No genes with selected dims found.")
+combined <- Reduce(function(a, b) merge(a, b, by = "ID", all = FALSE), sel_list)
+
+# bring phenotype back
+combined <- merge(combined, df[, .(ID, pheno = get(pheno_col))], by = "ID", all.x = TRUE, all.y = FALSE)
+
+# quick checks
+cat("Samples (IDs) in combined matrix:", nrow(combined), "\n")
+cat("Number of predictors:", ncol(combined) - 2, "(ID and pheno excluded)\n")  # -2 for ID and pheno
+```
+
+
+```{r}
+# fit a plain linear model (may be unstable if predictors >> samples)
+# remove ID column for model
+lm_formula <- as.formula(paste("pheno ~", paste(setdiff(colnames(combined), c("ID", "pheno")), collapse = " + ")))
+lm_fit <- try(lm(lm_formula, data = combined), silent = TRUE)
+
+if (inherits(lm_fit, "try-error")) {
+  warning("lm failed (probably too many predictors). See glmnet example below.")
+} else {
+  print(summary(lm_fit))
+}
+```
+
+```{r}
+plot(lm_fit$fitted.values, combined$pheno)
+```
+
+```{r}
+# per-gene variable selection and building a combined design matrix
+library(data.table)
+library(stats)
+
+setDT(clean_embeds)
+setDT(df)
+
+pheno_col <- "pheno_wc2.1_2.5m_bio_8_p50"
+n_top <- 1
+
+sel_list <- vector("list", length(genes))
+names(sel_list) <- genes
+
+for (gene in genes) {
+  gdt <- clean_embeds[Gene == gene, c("ID", embed_cols), with = FALSE]
+  gdt <- merge(gdt, df[, .(ID, pheno = get(pheno_col))], by = "ID", all.x = FALSE, all.y = FALSE)
+  
+  if (nrow(gdt) < 5) {
+    warning(sprintf("Gene %s has only %d rows; skipping.", gene, nrow(gdt)))
+    next
+  }
+  
+  cors <- sapply(embed_cols, function(col) cor(gdt[[col]], gdt$pheno, use = "complete.obs"))
+  available <- names(cors)[!is.na(cors)]
+  k <- min(n_top, length(available))
+  top_dims <- names(sort(abs(cors[available]), decreasing = TRUE))[1:k]
+  
+  sel <- gdt[, c("ID", top_dims), with = FALSE]
+  setnames(sel, old = top_dims, new = paste0(gene, "__", top_dims))
+  sel_list[[gene]] <- sel
+}
+
+sel_list <- sel_list[!sapply(sel_list, is.null)]
+
+# merge across all IDs (full outer join instead of intersection)
+combined <- Reduce(function(a, b) merge(a, b, by = "ID", all = TRUE), sel_list)
+
+# bring phenotype back
+combined <- merge(combined, df[, .(ID, pheno = get(pheno_col))], by = "ID", all.x = TRUE, all.y = FALSE)
+
+# median imputation for missing predictors (exclude ID + pheno)
+pred_cols <- setdiff(names(combined), c("ID", "pheno"))
+for (col in pred_cols) {
+  med <- median(combined[[col]], na.rm = TRUE)
+  combined[is.na(get(col)), (col) := med]
+}
+
+# quick checks
+cat("Samples (IDs) in combined matrix:", nrow(combined), "\n")
+cat("Number of predictors:", length(pred_cols), "\n")
+
+```
+
+```{r}
+# fit a plain linear model (may be unstable if predictors >> samples)
+# remove ID column for model
+lm_formula <- as.formula(paste("pheno ~", paste(setdiff(colnames(combined), c("ID", "pheno")), collapse = " + ")))
+lm_fit <- try(lm(lm_formula, data = combined), silent = TRUE)
+
+if (inherits(lm_fit, "try-error")) {
+  warning("lm failed (probably too many predictors). See glmnet example below.")
+} else {
+  print(summary(lm_fit))
+}
+
+plot(lm_fit$fitted.values, combined$pheno, main="pheno ~ top5 embs per gene, n=10857")
+```
+
+
+
+```{r}
+library(ggplot2)
+
+set.seed(123)  # reproducibility
+
+# predictors
+pred_cols <- setdiff(names(combined), c("ID", "pheno"))
+
+## ---- 1. Random 10% holdout ----
+idx_test <- sample(seq_len(nrow(combined)), size = ceiling(0.1 * nrow(combined)))
+train1 <- combined[-idx_test]
+test1  <- combined[idx_test]
+
+fit1 <- lm(pheno ~ ., data = train1[, c("pheno", pred_cols), with = FALSE])
+pred1 <- predict(fit1, newdata = test1)
+
+# plot
+ggplot(data.frame(obs = test1$pheno, pred = pred1), aes(x = pred, y = obs)) +
+  geom_point(alpha = 0.5) +
+  geom_abline(color = "red", linetype = "dashed") +
+  labs(title = "Random 10% Holdout",
+       x = "Predicted phenotype",
+       y = "Observed phenotype") +
+  theme_minimal()
+
+
+## ---- 2. Poaceae holdout ----
+# get Poaceae IDs
+poaceae_ids <- df[grepl("Poales", Taxonomy), ID]
+
+train2 <- combined[!ID %in% poaceae_ids]
+test2  <- combined[ID %in% poaceae_ids]
+
+fit2 <- lm(pheno ~ ., data = train2[, c("pheno", pred_cols), with = FALSE])
+pred2 <- predict(fit2, newdata = test2)
+
+# plot
+ggplot(data.frame(obs = test2$pheno, pred = pred2), aes(x = pred, y = obs)) +
+  geom_point(alpha = 0.5, color = "darkgreen") +
+  geom_abline(color = "red", linetype = "dashed") +
+  labs(title = "Poales Holdout",
+       x = "Predicted phenotype",
+       y = "Observed phenotype") +
+  theme_minimal()
+
+```
+
+```{r}
+rmse     <- function(a,b) sqrt(mean((a - b)^2))
+
+plot(pred2,test2$pheno, main="bio8 ~ top1 embs/gene, holdout Poales",
+      xlab="Predicted",
+      ylab="Observed")
+abline(a=0,b=1, col="coral")
+text(25, 5,
+     paste0("spearman=",round(cor(pred2,test2$pheno), 3)),col="red")
+text(25,2,
+     paste0("RMSE=",round(rmse(pred2,test2$pheno), 3)),col="red")
+```
+
+```{r}
+for (ord in unique(df$Order)) {
+  # get Poaceae IDs
+  poaceae_ids <- df[grepl(ord, Taxonomy), ID]
+  
+  train2 <- combined[!ID %in% poaceae_ids]
+  test2  <- combined[ID %in% poaceae_ids]
+  
+  fit2 <- lm(pheno ~ ., data = train2[, c("pheno", pred_cols), with = FALSE])
+  pred2 <- predict(fit2, newdata = test2)
+  
+  # plot
+  ggplot(data.frame(obs = test2$pheno, pred = pred2), aes(x = pred, y = obs)) +
+    geom_point(alpha = 0.5, color = "darkgreen") +
+    geom_abline(color = "red", linetype = "dashed") +
+    labs(title = paste0(ord, " Holdout"),
+         x = "Predicted phenotype",
+         y = "Observed phenotype") +
+    theme_minimal()
+  
+  rmse     <- function(a,b) sqrt(mean((a - b)^2))
+  
+  plot(pred2,test2$pheno, main=paste0("bio8 ~ top1 embs/gene, holdout ", ord),
+        xlab="Predicted",
+        ylab="Observed")
+  abline(a=0,b=1, col="coral")
+  text(quantile(pred2, 0.75), quantile(test2$pheno, 0.25),
+       paste0("spearman=",round(cor(pred2,test2$pheno), 3)),col="red")
+  text(quantile(pred2, 0.75), quantile(test2$pheno, 0.25)-2,
+       paste0("RMSE=",round(rmse(pred2,test2$pheno), 3)),col="red")
+}
+```
+
+
+```{r}
+# variable selection: pick embedding dims by mean correlation across Orders
+setDT(clean_embeds)
+
+pheno_col <- "pheno_wc2.1_2.5m_bio_8_p50"
+orders <- unique(df$Order)
+n_top <- 5
+sel_list <- vector("list", length(genes))
+names(sel_list) <- genes
+
+for (gene in genes) {
+  gdt <- clean_embeds[Gene == gene, c("ID", embed_cols), with = FALSE]
+  gdt <- merge(gdt, df[, .(ID, Order, pheno = get(pheno_col))], by = "ID")
+  if (nrow(gdt) < 5) next
+  
+  # order-wise correlations
+  cors_by_order <- sapply(embed_cols, function(col) {
+    vals <- sapply(orders, function(ord) {
+      sub <- gdt[Order == ord]
+      if (nrow(sub) < 3) return(NA_real_)
+      cor(sub[[col]], sub$pheno, use = "complete.obs")
+    })
+    mean(vals, na.rm = TRUE)
+  })
+  
+  hist(cors_by_order, main=gene)
+  
+  available <- names(cors_by_order)[!is.na(cors_by_order)]
+  k <- min(n_top, length(available))
+  top_dims <- names(sort(abs(cors_by_order[available]), decreasing = TRUE))[1:k]
+  
+  sel <- gdt[, c("ID", top_dims), with = FALSE]
+  setnames(sel, old = top_dims, new = paste0(gene, "__", top_dims))
+  sel_list[[gene]] <- sel
+}
+
+# drop skipped genes
+sel_list <- sel_list[!sapply(sel_list, is.null)]
+
+# merge across all IDs (full outer join)
+combined <- Reduce(function(a, b) merge(a, b, by = "ID", all = TRUE), sel_list)
+
+# bring phenotype back
+combined <- merge(combined, df[, .(ID, pheno = get(pheno_col))], by = "ID", all.x = TRUE)
+
+# median impute missing predictors
+pred_cols <- setdiff(names(combined), c("ID", "pheno"))
+for (col in pred_cols) {
+  med <- median(combined[[col]], na.rm = TRUE)
+  combined[is.na(get(col)), (col) := med]
+}
+
+cat("Samples in combined matrix:", nrow(combined), "\n")
+cat("Number of predictors:", length(pred_cols), "\n")
+
+
+
+```
+

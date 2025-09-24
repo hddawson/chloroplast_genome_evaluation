@@ -11,6 +11,10 @@ X <- as.data.table(read_parquet("data/rbcL_embeddings.parquet"))
 
 #merge on ID in df and sample_id in X, fit a lm
 
+
+#the outliers I found by manual inspection are
+outliers <- c("JN032131.1", "MZ475300.1", "MH325132.1", "MK645903.1", "PV424006.1")
+
 merged <- merge(df[, .(ID, pheno_Topt_site_p50)], X, by.x="ID", by.y="sample_id")
 fit <- lm(pheno_Topt_site_p50 ~ . -ID, data=merged)
 summary(fit)

@@ -1,0 +1,100 @@
+
+RAxML-NG v. 1.2.0 released on 09.05.2023 by The Exelixis Lab.
+Developed by: Alexey M. Kozlov and Alexandros Stamatakis.
+Contributors: Diego Darriba, Tomas Flouri, Benoit Morel, Sarah Lutteropp, Ben Bettisworth, Julia Haag, Anastasis Togkousidis.
+Latest version: https://github.com/amkozlov/raxml-ng
+Questions/problems/suggestions? Please visit: https://groups.google.com/forum/#!forum/raxml
+
+System: Intel(R) Xeon(R) Gold 6238 CPU @ 2.10GHz, 44 cores, 503 GB RAM
+
+RAxML-NG was called at 16-Sep-2025 10:54:16 as follows:
+
+/programs/raxml-ng_v1.2.0/raxml-ng --all --msa T2.raxml.rba --tree-constraint constraint_pruned.tre --bs-trees 10 --threads 15
+
+Analysis options:
+  run mode: ML tree search + bootstrapping (Felsenstein Bootstrap)
+  start tree(s): random (10) + parsimony (10)
+  bootstrap replicates: parsimony (10)
+  topological constraint: constraint_pruned.tre (algorithm: NEW)
+  random seed: 1758034456
+  tip-inner: OFF
+  pattern compression: ON
+  per-rate scalers: OFF
+  site repeats: ON
+  logLH epsilon: general: 10.000000, brlen-triplet: 1000.000000
+  fast spr radius: AUTO
+  spr subtree cutoff: 1.000000
+  fast CLV updates: ON
+  branch lengths: proportional (ML estimate, algorithm: NR-FAST)
+  SIMD kernels: AVX2
+  parallelization: coarse-grained (auto), PTHREADS (15 threads), thread pinning: OFF
+
+[00:00:00] Loading binary alignment from file: T2.raxml.rba
+[00:00:00] Alignment comprises 10607 taxa, 1 partitions and 58778 patterns
+
+Partition 0: noname
+Model: GTR+FO+G4m
+Alignment sites / patterns: 80731 / 58778
+Gaps: 39.10 %
+Invariant sites: 37.99 %
+
+
+[00:00:00] Loading constraint tree from: constraint_pruned.tre
+[00:00:00] Loaded comprehensive constraint tree with 10607 taxa
+
+Parallelization scheme autoconfig: 1 worker(s) x 15 thread(s)
+
+
+NOTE: Per-rate scalers were automatically enabled to prevent numerical issues on taxa-rich alignments.
+NOTE: You can use --force switch to skip this check and fall back to per-site scalers.
+
+[00:00:00] Generating 10 random starting tree(s) with 10607 taxa
+[00:00:01] Generating 10 parsimony starting tree(s) with 10607 taxa
+Parallel parsimony with 15 threads
+Parallel reduction/worker buffer size: 1 KB  / 0 KB
+
+[03:01:17] Data distribution: max. partitions/sites/weight per thread: 1 / 3919 / 62704
+[03:01:18] Data distribution: max. searches per worker: 30
+
+Starting ML tree search with 20 distinct starting trees
+
+[29:14:05] ML tree search #1, logLikelihood: -11613104.946370
+[57:54:06] ML tree search #2, logLikelihood: -11613155.766127
+[83:44:48] ML tree search #3, logLikelihood: -11613256.610442
+[105:24:53] ML tree search #4, logLikelihood: -11613079.403325
+[125:35:11] ML tree search #5, logLikelihood: -11613348.445047
+[149:55:22] ML tree search #6, logLikelihood: -11613300.956363
+[171:15:07] ML tree search #7, logLikelihood: -11613277.884870
+GHz, 44 cores, 503 GB RAM
+
+RAxML-NG was called at 17-Sep-2025 09:23:50 as follows:
+
+/programs/raxml-ng_v1.2.0/raxml-ng --check --msa tree/T2.raxml.rba
+
+Analysis options:
+  run mode: Alignment validation
+  start tree(s): 
+  random seed: 1758115429
+  SIMD kernels: AVX2
+  parallelization: coarse-grained (auto), PTHREADS (auto)
+
+[00:00:00] Loading binary alignment from file: tree/T2.raxml.rba
+[00:00:00] Alignment comprises 10607 taxa, 1 partitions and 58778 patterns
+
+Partition 0: noname
+Model: GTR+FO+G4m
+Alignment sites / patterns: 80731 / 58778
+Gaps: 39.10 %
+Invariant sites: 37.99 %
+
+
+
+Alignment can be successfully read by RAxML-NG.
+
+
+Execution log saved to: /local/workdir/hdd29/chloroplast_genome_evaluation/tree/T2.raxml.rba.raxml.log
+
+Analysis started: 17-Sep-2025 09:23:50 / finished: 17-Sep-2025 09:23:50
+
+Elapsed time: 0.390 seconds
+

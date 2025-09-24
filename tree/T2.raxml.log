@@ -1,0 +1,57 @@
+
+RAxML-NG v. 1.2.0 released on 09.05.2023 by The Exelixis Lab.
+Developed by: Alexey M. Kozlov and Alexandros Stamatakis.
+Contributors: Diego Darriba, Tomas Flouri, Benoit Morel, Sarah Lutteropp, Ben Bettisworth, Julia Haag, Anastasis Togkousidis.
+Latest version: https://github.com/amkozlov/raxml-ng
+Questions/problems/suggestions? Please visit: https://groups.google.com/forum/#!forum/raxml
+
+System: Intel(R) Xeon(R) Gold 6238 CPU @ 2.10GHz, 44 cores, 503 GB RAM
+
+RAxML-NG was called at 16-Sep-2025 10:26:00 as follows:
+
+/programs/raxml-ng_v1.2.0/raxml-ng --parse --msa T1.raxml.reduced.phy --model GTR+G --prefix T2
+
+Analysis options:
+  run mode: Alignment parsing and compression
+  start tree(s): 
+  random seed: 1758032760
+  tip-inner: OFF
+  pattern compression: ON
+  per-rate scalers: OFF
+  site repeats: ON
+  logLH epsilon: general: 10.000000, brlen-triplet: 1000.000000
+  branch lengths: proportional (ML estimate, algorithm: NR-FAST)
+  SIMD kernels: AVX2
+  parallelization: coarse-grained (auto), PTHREADS (auto)
+
+[00:00:00] Reading alignment from file: T1.raxml.reduced.phy
+[00:00:01] Loaded alignment with 10607 taxa and 80731 sites
+
+Alignment comprises 1 partitions and 58778 patterns
+
+Partition 0: noname
+Model: GTR+FO+G4m
+Alignment sites / patterns: 80731 / 58778
+Gaps: 39.10 %
+Invariant sites: 37.99 %
+
+
+NOTE: Binary MSA file created: T2.raxml.rba
+
+
+* Estimated memory requirements                : 152198 MB
+
+* Recommended number of threads / MPI processes: 15
+
+Please note that numbers given above are rough estimates only. 
+Actual memory consumption and parallel performance on your system may differ!
+
+Alignment can be successfully read by RAxML-NG.
+
+
+Execution log saved to: /local/workdir/hdd29/chloroplast_genome_evaluation/tree/T2.raxml.log
+
+Analysis started: 16-Sep-2025 10:26:00 / finished: 16-Sep-2025 10:26:31
+
+Elapsed time: 31.649 seconds
+

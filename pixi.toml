@@ -45,6 +45,9 @@ r-caper = ">=1.0.4,<2"
 r-adephylo = ">=1.1_17,<2"
 r-phylobase = ">=0.8.12,<0.9"
 r-nlme = ">=3.1_168,<4"
+r-proc = ">=1.19.0.1,<2"
+r-glmnet = ">=4.1_10,<5"
+r-peptides = ">=2.4.6,<3"
 
 [pypi-dependencies]
 biopython = ">=1.85, <2"
