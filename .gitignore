@@ -18,3 +18,5 @@ jellyfish_output/*
 *.png
 *.tar.gz
 dataset
+tree/*
+
