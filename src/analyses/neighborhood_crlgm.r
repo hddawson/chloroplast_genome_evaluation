@@ -7,19 +7,19 @@ library(arrow)
 data <- read_parquet("data/processed_data.parquet")
 tree <- read.tree("data/Fasttree/Fasttree.nwk")
 
-aln_data <- read_parquet("data/tmp/cds_supermatrix.parquet")
-for (j in seq_along(aln_data)) set(aln_data, which(is.na(aln_data[[j]])), j, 0)
-invariant_cols <- names(aln_data)[vapply(aln_data, function(x) all(x == x[1L]), logical(1))]
-aln_data[, (invariant_cols) := NULL]
-aln_mat <- as.matrix(aln_data[,-1])
-dim(aln_mat)
-pca <- prcomp(aln_mat, center = T, scale. = T, rank.=5)
-saveRDS(pca, "data/tmp/pca.rds")
-pca < - readRDS("data/tmp/pca.rds")
-scores <- pca$x[,1;5]
+#aln_data <- read_parquet("data/tmp/cds_supermatrix.parquet")
+#for (j in seq_along(aln_data)) set(aln_data, which(is.na(aln_data[[j]])), j, 0)
+#invariant_cols <- names(aln_data)[vapply(aln_data, function(x) all(x == x[1L]), logical(1))]
+#aln_data[, (invariant_cols) := NULL]
+#aln_mat <- as.matrix(aln_data[,-1])
+#dim(aln_mat)
+#pca <- prcomp(aln_mat, center = T, scale. = T, rank.=5)
+#saveRDS(pca, "data/tmp/pca.rds")
+#pca < - readRDS("data/tmp/pca.rds")
+
 
 poales_data <- data[grep(
-  "Poales", data$Taxonomy
+  "Spermatophyta", data$Taxonomy
 ),]
 
 # Match tree to data
@@ -29,14 +29,14 @@ poales_tree <- keep.tip(tree, poales_data$ID)
 poales_data <- poales_data[match(poales_tree$tip.label, poales_data$ID), ]
 
 # Remove NAs
-complete_cases <- complete.cases(poales_data$pheno_Topt_site_p50)
+complete_cases <- complete.cases(poales_data$pheno_wc2.1_2.5m_bio_8_p50)
 poales_data <- poales_data[complete_cases, ]
 poales_tree <- keep.tip(poales_tree, poales_data$ID)
 
 poales_tree_fixed <- poales_tree
 
 tree <- poales_tree_fixed
-trait <- poales_data$pheno_Topt_site_p50
+trait <- poales_data$pheno_wc2.1_2.5m_bio_8_p50
 stopifnot(all(names(trait) == tree$tip.label))
 
 # 1. compute node distances (topological, not patristic)
@@ -90,7 +90,7 @@ pval <- sapply(moran.results, function(x) {
 png("plots/spermatophyta_neighborhood_correlogram.png",
     width = 40, height = 10, units = "in", res = 300)
 plot(classes, I, type = "b", pch = 16,
-     main="Spermatophyta phylogenetic signal |T_opt~|topological distance|Fasttree|",
+     main="Spermatophyta phylogenetic signal |BIO8~|topological distance|Fasttree|",
      cex.main = 0.9,font.main = 2,
      xlab = "topological distance (nodes apart)", ylab = "Moran's I (Abouheif)")
 abline(h = 0, lty = 2)

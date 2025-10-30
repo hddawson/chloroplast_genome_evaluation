@@ -10,7 +10,8 @@ env_data/*
 results/*
 tmp/*
 jellyfish_output/*
-
+biolib*
+output*
 .RData
 .Rhistory
 *.rds

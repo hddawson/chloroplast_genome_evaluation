@@ -5,8 +5,8 @@ mkdir -p /workdir/hdd29/tmp
 export TMP_BASE_DIR="/workdir/hdd29/tmp"
 
 # Set directories
-input_dir="/workdir/hdd29/chloroplast_genome_evaluation/data/genomes"
-final_dir="/workdir/hdd29/chloroplast_genome_evaluation/data/annotationResults"
+input_dir="/workdir/hdd29/chloroplast_genome_evaluation/data/speciesWork/At/genomes/"
+final_dir="/workdir/hdd29/chloroplast_genome_evaluation/data/speciesWork/At/annotationResults/"
 singularity_image="cpgavas2_0.03.sif"
 bind_dir="$input_dir"
 
@@ -120,4 +120,4 @@ export -f process_file
 export singularity_image bind_dir final_dir TMP_BASE_DIR input_dir
 
 # Read the file list and process each basename
-cat "$file_list" | parallel --progress -j 80 process_file {}
+cat "$file_list" | parallel --progress -j 10 process_file {}

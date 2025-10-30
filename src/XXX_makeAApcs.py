@@ -316,10 +316,10 @@ if __name__ == "__main__":
 
     #produce_supermatrix(lui_list, aln_files, "data/tmp/cds_supermatrix.fasta")
 
-    #aln_df = get_sites_from_alignment_fasta("data/tmp/cds_supermatrix.fasta", samples_per_site=0.99)
+    aln_df = get_sites_from_alignment_fasta("data/tmp/cds_supermatrix.fasta", samples_per_site=0.95)
 
     #save the aln_df
-    aln_df = pd.read_parquet("data/tmp/cds_supermatrix.parquet")
+    #aln_df = pd.read_parquet("data/tmp/cds_supermatrix.parquet")
 
     #expand the supermatrix
 

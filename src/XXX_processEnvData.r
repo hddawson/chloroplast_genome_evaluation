@@ -38,10 +38,11 @@ process_file <- function(file) {
 # Process files
 results <- lapply(csv_files, process_file)
 result <- Reduce(function(x, y) merge(x, y, by = "queryTerm", all = TRUE, sort = FALSE), results)
-
+saveRDS(result, file = "data/tmp/envData_processed.rds")
+quit()
 #get n_occurrences from a representative file 
 #not T_Opt_site - NA at noisy sites
-
+result <- readRDS("data/tmp/envData_processed.rds")
 dt <- fread(csv_files[2])
 dt <- na.omit(dt)
 
@@ -53,7 +54,7 @@ result <- na.omit(result)
 
 data <- merge(result,n_occs,by = "queryTerm")
 
-sum(data$n_occurrences < 4)
+sum(data$n_occurrences > 3)
 par(mfrow=c(1,1))
 hist(data$Topt_site_p50)
 hist(data$Topt_site_p10)

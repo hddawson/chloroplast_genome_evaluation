@@ -1,17 +1,16 @@
 library(data.table)
 library(arrow)
 library(ggplot2)
-df <- read_parquet("data/tmp/majMinor_aln.pq")
-data <- setDT(df)
+aln <- read_parquet("data/tmp/majMinor_aln.pq")
+data <- setDT(aln)
 
 stopifnot(is.character(data[[1]]))
-data[is.na(data)] <- 0
-#drop all zero var columns 
+for (j in seq_along(data)) set(data, which(is.na(data[[j]])), j, median(data[[j]], na.rm=TRUE))#drop all zero var columns 
 invariant_cols <- names(data)[sapply(data, function(x) length(unique(x)) == 1)]
 cat("Dropping", length(invariant_cols), "invariant columns\n")
 data <- data[, !..invariant_cols]
 
-pca <- prcomp(data[,-1], rank.=100, scale. = TRUE)
+pca <- prcomp(data[,-1], rank.=1000, scale. = TRUE)
 saveRDS(pca, "data/tmp/majMinor_aln_pca.rds")
 cat("PCA done!")
 quit()
@@ -22,6 +21,11 @@ pvar <- pca$sdev^2 / sum(pca$sdev^2)
 pvar <- round(pvar*100,2)
 
 barplot(pvar)
+dev.off()
+plot(cumsum(pvar)[1:1000],
+     main="Cumulative percent variance explained by Principal Components",
+     xlab="Number of PCs",
+     ylab="Cumulative Percent Variance Explained")
 plot(pca$x[,1],pca$x[,2])
 scores <- as.data.frame(pca$x)
 df <- cbind(data,scores)
@@ -29,6 +33,161 @@ df <- cbind(data,scores)
 plot(pca$x[,2],pca$x[,3])
 
 table(df$Order)
+
+orders <- unique(df$Order)
+n_orders <- length(orders)
+
+colors <- c("red", "blue", "seagreen", "orange", "purple", "brown", "black", "darkgreen")
+shapes <- c(3,4,11,16, 17, 18, 15, 19)  # circle, triangle, diamond, square, filled circle
+
+# Create color and shape vectors (recycle as needed)
+order_colors <- rep(colors, length.out = n_orders)
+order_shapes <- rep(shapes, length.out = n_orders)
+
+pairs <- expand.grid(color=colors, shape=shapes)
+pairs <- pairs[sample(nrow(pairs), n_orders),]
+
+order_colors <- pairs$color
+order_shapes <- pairs$shape
+
+plot_pca_orders <- function(A, B, df, pvar, orders, order_colors, order_shapes, main_title = NULL) {
+  stopifnot(A %in% seq_along(pvar), B %in% seq_along(pvar))
+  
+  # Default title if not provided
+  if (is.null(main_title)) {
+    main_title <- sprintf("PCA by Order (PC%d vs PC%d)", A, B)
+  }
+  
+  dev.off()  # reset graphics device
+  
+  # Layout: main plot + legend panel
+  layout(matrix(c(1,2), 1, 2), widths = c(3, 2))
+  
+  # Main plot
+  plot(df[[paste0("PC", A)]], df[[paste0("PC", B)]],
+       type = "n",
+       xlab = sprintf("PC%d (%.1f%%)", A, pvar[A]),
+       ylab = sprintf("PC%d (%.1f%%)", B, pvar[B]),
+       main = main_title)
+  
+  # Add points for each order
+  for (i in seq_along(orders)) {
+    order_subset <- df$Order == orders[i]
+    points(df[[paste0("PC", A)]][order_subset],
+           df[[paste0("PC", B)]][order_subset],
+           col = order_colors[i],
+           pch = order_shapes[i],
+           cex = 0.8)
+  }
+  
+  # Side panel for legend
+  par(mar = c(5, 0, 4, 2))
+  plot.new()
+  legend("topleft", legend = orders,
+         col = order_colors, pch = order_shapes,
+         cex = 0.7, pt.cex = 0.7,
+         bty = "n", ncol = 2, y.intersp = 0.6)
+  
+  # Reset layout
+  par(mfrow = c(1,1))
+}
+plot_pca_orders(1, 2, df, pvar, orders, order_colors, order_shapes)   # PC1 vs PC2
+plot_pca_orders(3, 4, df, pvar, orders, order_colors, order_shapes)   # PC1 vs PC2
+plot_pca_orders(5, 6, df, pvar, orders, order_colors, order_shapes)   # PC1 vs PC2
+plot_pca_orders(7, 8, df, pvar, orders, order_colors, order_shapes)   # PC1 vs PC2
+plot_pca_orders(9, 10, df, pvar, orders, order_colors, order_shapes)   # PC1 vs PC2
+plot_pca_orders(11, 12, df, pvar, orders, order_colors, order_shapes)   # PC1 vs PC2
+plot_pca_orders(13, 14, df, pvar, orders, order_colors, order_shapes)   # PC1 vs PC2
+plot_pca_orders(15, 16, df, pvar, orders, order_colors, order_shapes)   # PC1 vs PC2
+plot_pca_orders(17, 18, df, pvar, orders, order_colors, order_shapes)   # PC1 vs PC2
+plot_pca_orders(19, 20, df, pvar, orders, order_colors, order_shapes)   # PC1 vs PC2
+plot_pca_orders(21, 22, df, pvar, orders, order_colors, order_shapes)   # PC1 vs PC2
+
+library(ggplot2)
+library(gridExtra)
+
+pairs <- split(1:20, rep(1:10, each=2))
+plots <- lapply(seq_along(pairs), function(i){
+  A <- pairs[[i]][1]; B <- pairs[[i]][2]
+  ggplot(df, aes_string(x=paste0("PC",A), y=paste0("PC",B), color="Order", shape="Order")) +
+    geom_point(size=1, alpha=0.7) +
+    labs(x=sprintf("PC%d (%.1f%%)",A,pvar[A]),
+         y=sprintf("PC%d (%.1f%%)",B,pvar[B]),
+         title=sprintf("PC%d vs PC%d",A,B)) +
+    theme_bw() +
+    theme(legend.position="none",
+          plot.title=element_text(size=10),
+          axis.title=element_text(size=8),
+          axis.text=element_text(size=7))
+})
+
+legend_plot <- ggplot(df, aes(PC1, PC2, color=Order, shape=Order)) +
+  geom_point() + theme_void() +
+  theme(legend.position="bottom", legend.title=element_blank()) +
+  guides(color=guide_legend(ncol=4), shape=guide_legend(ncol=4))
+
+g_legend <- function(a.gplot){
+  tmp <- ggplotGrob(a.gplot)
+  leg <- gtable::gtable_filter(tmp, "guide-box")
+  return(leg)
+}
+
+legend_grob <- g_legend(legend_plot)
+title_grob <- grid::textGrob(sprintf("Cumulative variance explained: %.1f%% (PC1–PC20)", sum(pvar[1:20])),
+                             gp=grid::gpar(fontsize=12, fontface="bold"))
+
+gridExtra::grid.arrange(
+  do.call(gridExtra::arrangeGrob, c(plots, ncol=5, nrow=2)),
+  legend_grob,
+  title_grob,
+  ncol=1,
+  heights=c(10,1,0.5)
+)
+
+
+
+
+
+plot(pca$x[,9],pca$x[,10], col="red")
+text(pca$x[,9],pca$x[,10],labels=df$Organism)
+head(order(df$PC10))
+
+# flag outliers (top/right extremes)
+thr9 <- 100
+thr10 <- 100
+outliers <- df[df$PC9 > thr9 & df$PC10 > thr10,]
+outliers[, "ID"]
+
+embeds <- readRDS("data/tmp/embeds_with_mds.rds")
+embed_cols <- grep("embedding", colnames(embeds), value=TRUE)
+clean_embeds <- embeds[ManualOutlier == FALSE]
+
+out_ids <- outliers$ID
+psa_out_ids <- embeds[ManualOutlier & Gene=="psaA", ID]
+embeds[ManualOutlier & Gene=="psaA", MDS_zscore]
+
+plot(embeds[Gene=="psaA", MDS1],embeds[Gene=="psaA", MDS2])
+points(embeds[Gene=="psaA" & ID %in% out_ids, MDS1],
+       embeds[Gene=="psaA" & ID %in% out_ids, MDS2],
+       col="red")
+
+list(
+  overlap = intersect(out_ids, psa_out_ids),
+  only_in_pc_outliers = setdiff(out_ids, psa_out_ids),
+  only_in_psa_outliers = setdiff(psa_out_ids, out_ids)
+)
+
+# loadings
+vars <- colnames(data)[-1]
+loadings <- as.data.table(pca$rotation, keep.rownames="variable")
+loadings[, variable := vars]
+
+pc9_top <- loadings[order(-abs(PC9))][1:200, .(variable, PC9)]
+pc10_top <- loadings[order(-abs(PC10))][1:200, .(variable, PC10)]
+
+list(pc9_top=pc9_top, pc10_top=pc10_top)
+
+table(data$cds_supermatrix_14817)
 
 with(df[grep("Poales", df$Taxonomy), ],
      points(PC2, PC3, col="seagreen"))
@@ -39,15 +198,8 @@ with(df[grep("Fabales", df$Taxonomy), ],
 with(df[grep("Pinales", df$Taxonomy), ],
      points(PC2, PC3, col="blue"))
 
-orders <- unique(df$Order)
-n_orders <- length(orders)
 
-colors <- c("red", "blue", "seagreen", "orange", "purple", "brown")
-shapes <- c(3,4,11,16, 17, 18, 15, 19)  # circle, triangle, diamond, square, filled circle
 
-# Create color and shape vectors (recycle as needed)
-order_colors <- rep(colors, length.out = n_orders)
-order_shapes <- rep(shapes, length.out = n_orders)
 
 # Create the plot
 plot(df$PC2, df$PC3, type="n", 
@@ -141,8 +293,13 @@ plot_pca_orders(3, 4, df, pvar, orders, order_colors, order_shapes)   # PC1 vs P
 plot_pca_orders(5, 6, df, pvar, orders, order_colors, order_shapes)   # PC1 vs PC2
 plot_pca_orders(7, 8, df, pvar, orders, order_colors, order_shapes)   # PC1 vs PC2
 plot_pca_orders(9, 10, df, pvar, orders, order_colors, order_shapes)   # PC1 vs PC2
+plot_pca_orders(11, 12, df, pvar, orders, order_colors, order_shapes)   # PC1 vs PC2
+
 plot_pca_orders(13, 12, df, pvar, orders, order_colors, order_shapes)   # PC1 vs PC2
 plot_pca_orders(20, 21, df, pvar, orders, order_colors, order_shapes)   # PC1 vs PC2
+
+
+
 
 
 sort(abs(pca$rotation[,1]),decreasing=TRUE)[1:10]
