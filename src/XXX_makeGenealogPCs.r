@@ -10,7 +10,7 @@ invariant_cols <- names(data)[sapply(data, function(x) length(unique(x)) == 1)]
 cat("Dropping", length(invariant_cols), "invariant columns\n")
 data <- data[, !..invariant_cols]
 
-pca <- prcomp(data[,-1], rank.=1000, scale. = TRUE)
+pca <- prcomp(data[,-1], scale. = TRUE)
 saveRDS(pca, "data/tmp/majMinor_aln_pca.rds")
 cat("PCA done!")
 quit()
@@ -20,9 +20,22 @@ summary(pca)
 pvar <- pca$sdev^2 / sum(pca$sdev^2)
 pvar <- round(pvar*100,2)
 
+sv <- pca$sdev
+tol <- max(dim(data)) * .Machine$double.eps * max(sv)
+rank_est <- sum(sv > tol)
+cat("Numerical rank:", rank_est, "\n")
+
+X <- scale(as.matrix(data[,-1]), center = TRUE, scale = TRUE)
+svd_vals <- svd(X, nu = 0, nv = 0)$d
+tol <- max(dim(X)) * .Machine$double.eps * max(svd_vals)
+rank_est <- sum(svd_vals > tol)
+cat("Numerical rank:", rank_est, "\n")
+
+
 barplot(pvar)
 dev.off()
-plot(cumsum(pvar)[1:1000],
+max(cumsum(pvar))
+plot(cumsum(pvar)[1:5000],
      main="Cumulative percent variance explained by Principal Components",
      xlab="Number of PCs",
      ylab="Cumulative Percent Variance Explained")

@@ -18,7 +18,7 @@ aln <- read_parquet("data/tmp/majMinor_aln.pq")
 pcs_IDS <- aln$index
 scores <- as.data.frame(ev_pcs$x)
 scores <- cbind(ID = pcs_IDS, scores)
-n_pcs <- 100
+n_pcs <- 1000
 pc_names <- paste0("PC", seq_len(n_pcs))
 colnames(scores)[-1] <- paste0("PC", seq_len(ncol(scores)-1))
 scores <- scores %>% select(ID, all_of(pc_names))
@@ -62,12 +62,10 @@ df_joined <- df_joined %>%
 
 groups <- unique(df_joined$GroupID)
 
-require(doMC)
-registerDoMC(cores = 10)
-
 results_list <- vector("list", length(groups))
 emb_cols <- grep("^embedding_", colnames(df_joined), value = TRUE)
 
+# Loop over aligned positions
 # Loop over aligned positions
 for (i in seq_along(groups)) {
   gid <- groups[i]
@@ -81,69 +79,61 @@ for (i in seq_along(groups)) {
   #-----------------------------------
   # Base (reduced) model: PCs only
   #-----------------------------------
-  X_reduced <- X_pcs
-  cv_red <- tryCatch(
-    cv.glmnet(X_reduced, y, alpha = 0, standardize = FALSE, parallel = TRUE),
+  df_reduced <- as.data.frame(cbind(y = y, X_pcs))
+  fit_reduced <- tryCatch(
+    lm(y ~ ., data = df_reduced),
     error = function(e) NULL
   )
-  if (is.null(cv_red)) next
+  if (is.null(fit_reduced)) next
   
   #-----------------------------------
   # Full model: embeddings + PCs
   #-----------------------------------
-  X_full <- cbind(X_emb, X_pcs)
-  cv_full <- tryCatch(
-    cv.glmnet(X_full, y, alpha = 0, standardize = FALSE, parallel = TRUE),
+  df_full <- as.data.frame(cbind(y = y, X_emb, X_pcs))
+  fit_full <- tryCatch(
+    lm(y ~ ., data = df_full),
     error = function(e) NULL
   )
-  if (is.null(cv_full)) next
+  if (is.null(fit_full)) next
   
-  fit_full <- glmnet(
-    X_full, y, alpha = 0,
-    lambda = cv_full$lambda.min,
-    standardize = FALSE
-  )
-  yhat <- predict(fit_full, X_full)
-  r2 <- cor(y, yhat)^2
+  # Extract metrics
+  r2_reduced <- summary(fit_reduced)$r.squared
+  r2_full <- summary(fit_full)$r.squared
+  p_value <- anova(fit_reduced, fit_full)$`Pr(>F)`[2]
+  loglik_ratio <- logLik(fit_full)[1] - logLik(fit_reduced)[1]
   
   #-----------------------------------
-  # Extract CV errors
+  # Extract coefficients
   #-----------------------------------
-  cve_full <- cv_full$cvm[cv_full$lambda == cv_full$lambda.min]
-  cve_red  <- cv_red$cvm[cv_red$lambda == cv_red$lambda.min]
-  
-  #-----------------------------------
-  # Extract nonzero coefficients
-  #-----------------------------------
-  coefs <- as.data.frame(as.matrix(coef(fit_full))) %>%
+  coefs <- as.data.frame(coef(fit_full)) %>%
     tibble::rownames_to_column("Predictor")
-  
   colnames(coefs)[2] <- "Estimate"
-  
   coefs <- coefs %>%
-    dplyr::filter(Predictor != "(Intercept)", Estimate != 0) %>%
+    dplyr::filter(Predictor != "(Intercept)") %>%
     dplyr::mutate(
       Gene             = sub$Gene[1],
       Aligned_Position = sub$Aligned_Position[1],
       Residue          = sub$Residue[1],
-      Lambda           = cv_full$lambda.min,
       N                = nrow(sub),
-      R2               = r2,
-      CVE_Full         = cve_full,
-      CVE_Reduced      = cve_red,
-      CVE_Diff         = cve_red - cve_full   # positive = improvement
+      R2_full          = r2_full,
+      r2_reduced       = r2_reduced,
+      P_value          = p_value,
+      LogLik_Ratio     = loglik_ratio
     )
   
   results_list[[i]] <- coefs
   if (i %% 50 == 0) message("Processed ", i, "/", length(groups))
 }
+
 saveRDS(results_list, "results/results_list_cve.rds")
 results_list <- readRDS("results/results_list_cve.rds")
 results_df <- do.call(rbind, results_list)
 saveRDS(results_df, "results/residue_predictor_coefs_cve.rds")
 
-results_df <- readRDS("results/residue_predictor_coefs.rds")
-plot(results_df$CVE_Reduced,results_df$CVE_Full)
+hist(results_df$LogLik_Ratio)
+hist(results_df$R2_full)
+hist(results_df$r2_reduced)
+line(results_df$r2_reduced, results_df$R2_full)
 
 results_df$CVMRatio <- results_df$CVE_Reduced / results_df$CVE_Full
 hist(results_df$CVMRatio)
@@ -154,52 +144,6 @@ plot(results_df[results_df$Aligned_Position==238, ]$Estimate)
 boxplot(Estimate ~ Predictor,
         data=results_df[grep(".embedding", results_df$Predictor),])
 
-# 1. Identify interaction terms vs main effects
-results_df$is_interaction <- grepl("embedding.*\\.embedding", results_df$Predictor)
-results_df$is_embedding <- grepl("embedding", results_df$Predictor) & !results_df$is_interaction
-results_df$is_pc <- grepl("^PC", results_df$Predictor)
-
-results_df_no_int <- results_df[results_df$Predictor != "(Intercept)", ]
-
-# Then boxplot
-boxplot(abs(Estimate) ~ is_interaction, data = results_df_no_int,
-        main = "Interaction vs Main Effects",
-        ylim = c(0, 4))
-
-# Or use log scale if still skewed
-boxplot(abs(Estimate) ~ is_interaction, data = results_df_no_int,
-        main = "Interaction vs Main Effects",
-        log = "y")
-# 3. Look at interaction terms only
-interact_only <- results_df[results_df$is_interaction, ]
-hist(interact_only$Estimate, main = "Interaction Coefficients")
-
-# 4. Compare models with/without interactions per position
-results_summary <- results_df %>%
-  group_by(Aligned_Position, Residue) %>%
-  summarise(
-    sum_interact_coef = sum(abs(Estimate[is_interaction])),
-    sum_main_coef = sum(abs(Estimate[is_embedding])),
-    mean_interact_coef = mean(abs(Estimate[is_interaction])),
-    mean_main_coef = mean(abs(Estimate[is_embedding])),
-    CVE_Diff = CVE_Diff[1],
-    CVE_Full = CVE_Full[1],
-    .groups = "drop"
-  )
-
-plot(results_summary$sum_interact_coef, results_summary$CVE_Diff,
-     xlab = "Total |Interaction Coefs|", ylab = "CVE Improvement")
-abline(h = 0, col = "red", lty = 2)
-
-cor.test(results_summary$sum_interact_coef, results_summary$CVE_Diff)
-
-results_summary$interact_ratio <- results_summary$sum_interact_coef / 
-  results_summary$sum_main_coef
-
-hist(results_summary$interact_ratio, main = "Interaction/Main Effect Ratio")
-plot(results_summary$interact_ratio, results_summary$CVE_Diff)
-# 5. Test if interactions improve predictions
-t.test(CVE_Diff ~ (n_interactions > 0), data = results_summary)
 
 df_plot <- results_df %>%
   filter(grepl("embedding", Predictor)) %>%
@@ -248,21 +192,21 @@ df_bar <- df_plot %>%
   group_by(Gene, Aligned_Position) %>%
   summarise(
     TotalAbsEffect = sum(abs(Estimate), na.rm = TRUE),
-    CVMRatio = mean(CVMRatio, na.rm = TRUE),
+    LogLik_Ratio = mean(LogLik_Ratio, na.rm = TRUE),
     .groups = "drop"
   )
 
 
-plot(df_bar$TotalAbsEffect, df_bar$CVMRatio)
-text(df_bar$TotalAbsEffect, df_bar$LogLikRatio, df_bar$Aligned_Position)
+plot(df_bar$TotalAbsEffect, df_bar$LogLik_Ratio)
+text(df_bar$TotalAbsEffect, df_bar$LogLik_Ratio, df_bar$Aligned_Position)
 
-ggplot(df_bar, aes(x=Aligned_Position, y=CVMRatio)) +
+ggplot(df_bar, aes(x=Aligned_Position, y=LogLik_Ratio)) +
   geom_col(fill="#2C7BB6") +
   facet_wrap(~Gene, scales="free_x") +
   theme_minimal(base_size=12) +
   labs(x="Aligned_Position", y="CVMRatio") +
   scale_x_continuous(breaks=seq(min(df_bar$Aligned_Position), max(df_bar$Aligned_Position), by=10)) +
-  coord_cartesian(ylim=range(df_bar$CVMRatio))
+  coord_cartesian(ylim=range(df_bar$LogLik_Ratio))
 
 ggplot(df_bar, aes(x=Aligned_Position, y=LogLikRatio)) +
   geom_col(fill="#2C7BB6") +
@@ -282,12 +226,17 @@ library(jsonlite)
 feat_json <- 'data/psbA_features.json'
 j <- fromJSON(feat_json) 
 feats <- as.data.frame(j) 
+feat_df <- feats %>%
+  transmute(Residue_Index = features.location$start$value,
+            Label = features.ligand$name) %>%
+  left_join(at_df, by="Residue_Index") %>%
+  filter(!is.na(Aligned_Position))
 
 
 #a$location$end$value
 #a$ligand$name
 
-lines(df_bar$TotalAbsEffect)
+lines(df_bar$LogLikRatio)
 
 
 feats$loc <- feats$features.location$start$value
@@ -296,16 +245,16 @@ feat_df <- feats %>%
   left_join(at_df, by=c("loc"="Residue_Index")) %>%
   filter(!is.na(Aligned_Position))
 
-p <- ggplot(df_bar, aes(x=Aligned_Position, y=CVMRatio)) +
+p <- ggplot(df_bar, aes(x=Aligned_Position, y=LogLik_Ratio)) +
   geom_col(fill="#2C7BB6") +
   facet_wrap(~Gene, scales="free_x") +
   theme_minimal(base_size=12) +
-  labs(x="Aligned_Position", y="Cumulative |Effect Size|")
+  labs(x="Aligned_Position", y="LogLikRatio")
 
 p + geom_vline(data=feat_df, aes(xintercept=Aligned_Position),
                color="peachpuff", linetype="dashed", linewidth=0.7) +
   geom_text(data=feat_df,
-            aes(x=Aligned_Position, y=max(df_bar$CVMRatio)*0.7,
+            aes(x=Aligned_Position, y=max(df_bar$LogLik_Ratio)*0.7,
                 label=labl),
             angle=90, vjust=0, hjust=0, size=5, color="red")
 
@@ -315,7 +264,7 @@ cor(df_bar$LogLikRatio, df_bar$TotalAbsEffect)
 cor(results_df$R2, results_df$LogLikRatio)
 
 a <- results_df %>%
-  select(Aligned_Position, CVMRatio) %>%
+  select(Aligned_Position, LogLik_Ratio) %>%
   distinct()
 
 feat_df <- feats %>%
@@ -327,7 +276,7 @@ feat_df <- feats %>%
 
 
 
-ggplot(a, aes(x=Aligned_Position, y=CVMRatio)) +
+ggplot(a, aes(x=Aligned_Position, y=LogLik_Ratio)) +
   geom_line(color="#2C7BB6", linewidth=0.8) +
   geom_vline(data=feat_df, aes(xintercept=Aligned_Position),
              color="orange", linetype="dashed", linewidth=0.6) +
@@ -342,14 +291,14 @@ library(zoo)
 # rolling average of LogLikRatio over 15-position window
 a <- a %>%
   arrange(Aligned_Position) %>%
-  mutate(CVMRatio_smooth = rollapply(CVMRatio, width = 15, FUN = mean, align = "center", fill = NA))
+  mutate(LogLik_Ratio_smooth = rollapply(LogLik_Ratio, width = 15, FUN = mean, align = "center", fill = NA))
 
-plot(df_bar$TotalAbsEffect, df_bar$CVMRatio)
+plot(df_bar$TotalAbsEffect, df_bar$LogLik_Ratio)
 
-plot(a$Aligned_Position,a$CVMRatio_smooth, col="white",
+plot(a$Aligned_Position,a$LogLik_Ratio_smooth, col="white",
      main="Mean Cross Validated Error Ratio (Reduced / Full)",
-     xlab="Aligned position", ylab="CVM Ratio (No rolling average)")
-lines(a$Aligned_Position,a$CVMRatio_smooth, col="blue")
+     xlab="Aligned position", ylab="LogLik_Ratio_smooth")
+lines(a$Aligned_Position,a$LogLik_Ratio_smooth, col="blue")
 e_prior <- 0
 for (i in 1:nrow(tm_df)) {
   s <- tm_df[i,]$start_aln
@@ -357,7 +306,7 @@ for (i in 1:nrow(tm_df)) {
   abline(v=s, col="coral")
   abline(v=e, col="coral")
   sset <- a[a$Aligned_Position <= s &a$Aligned_Position >=e_prior,]
-  m <- mean(sset$CVMRatio)
+  m <- mean(sset$LogLik_Ratio)
   segments(e_prior, m, s, m, col="tomato")
   e_prior <-e
 }
@@ -365,7 +314,7 @@ s <- e_prior
 sset <- a[a$Aligned_Position <= max(a$Aligned_Position) & a$Aligned_Position >=s,]
 m <- mean(sset$CVMRatio)
 segments(e_prior, m, max(a$Aligned_Position), m, col="tomato")
-text(305, 1.02, "DE-loop", col="tomato")
+text(305, 1000, "DE-loop", col="tomato")
 for (i in 1:nrow(feat_df)) {
   abline(v = feat_df[i,]$Aligned_Position, col="green", lty=2, lwd=0.6)
   text(feat_df[i,]$Aligned_Position, 1.01, feat_df[i,]$Label, 

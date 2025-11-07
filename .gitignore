@@ -20,4 +20,5 @@ output*
 *.tar.gz
 dataset
 tree/*
-
+notebooks/.ipynb_checkpoints/*
+pfam_results/*
