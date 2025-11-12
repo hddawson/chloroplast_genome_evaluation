@@ -83,7 +83,7 @@ def download_genomes_and_extract_taxonomy(id_list, batch_size=100):
     print(f"Taxonomy information saved to '{taxonomy_file}'.")
 
 # Define the NCBI search query
-search_query = 'chloroplast[Title] AND "complete genome"[Title] AND srcdb_refseq[PROP]'
+search_query = '(chloroplast[All Fields] AND "complete genome"[All Fields] AND ("Arabidopsis thaliana"[Organism] OR ("Arabidopsis thaliana"[Organism] OR Arabidopsis thaliana[All Fields]))) AND "Arabidopsis thaliana"[Primary Organism] AND chloroplast[filter]'
 
 # Step 1: Get the total number of matching records
 print("Retrieving total record count...")

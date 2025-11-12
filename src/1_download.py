@@ -133,7 +133,7 @@ def split_fasta_files(input_dir, output_dir):
 if __name__ == "__main__":
     Entrez.email = "hdd29@cornell.edu"
 
-    query = 'chloroplast[Title] AND "complete genome"[Title]'
+    query = '(chloroplast[All Fields] AND "complete genome"[All Fields] AND ("Arabidopsis thaliana"[Organism] OR ("Arabidopsis thaliana"[Organism] OR Arabidopsis thaliana[All Fields]))) AND "Arabidopsis thaliana"[Primary Organism] AND chloroplast[filter]'
     print("Retrieving total record count...")
     handle = Entrez.esearch(db="nuccore", term=query, retmax=1)
     record = Entrez.read(handle)
@@ -145,7 +145,7 @@ if __name__ == "__main__":
     if ids:
         print(f"Retrieved {len(ids)} IDs")
         metadata_df = extract_metadata_and_download_genomes(ids, batch_size=100, output_dir="data/downloaded_genomes")
-        metadata_file = "data/taxonomy_info.csv"
+        metadata_file = "data/speciesWork/At/taxonomy_info.csv"
         os.makedirs(os.path.dirname(metadata_file), exist_ok=True)
         metadata_df.to_csv(metadata_file, index=False)
         print(f"Metadata saved to {metadata_file}")
@@ -153,10 +153,10 @@ if __name__ == "__main__":
     else:
         print("No IDs found.")
 
-    input_dir = "data/downloaded_genomes/"
+    input_dir = "data/speciesWork/At/downloaded_genomes/"
 
     # Output directory for individual genome FASTAs
-    output_dir = "data/genomes/"
+    output_dir = "data/speciesWork/At/individual_genomes/"
     os.makedirs(output_dir, exist_ok=True)
 
     split_fasta_files(input_dir, output_dir)

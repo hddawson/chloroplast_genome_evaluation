@@ -52,7 +52,7 @@ set.seed(123)
 for (gene in genes_to_process) {
   message("\n=== Processing gene: ", gene, " ===")
   
-  out_path <- paste0("results/tmp_results_nested_", gene, ".rds")
+  out_path <- paste0("results/embStandalone/tmp_results_nested_", gene, ".rds")
   
   if (file.exists(out_path)) {
     message("Skipping ", gene, " (output already exists)")
@@ -192,7 +192,7 @@ for (gene in genes_to_process) {
     fit_partial <- tryCatch(lm(y ~ X_aa + X_pcs), error = function(e) NULL)
     if (is.null(fit_partial)) next
     
-    fit_full <- tryCatch(lm(y ~ X_aa + X_emb + X_pcs), error = function(e) NULL)
+    fit_full <- tryCatch(lm(y ~ X_emb + X_pcs), error = function(e) NULL)
     if (is.null(fit_full)) next
     
     r2_reduced <- summary(fit_reduced)$r.squared
@@ -207,8 +207,8 @@ for (gene in genes_to_process) {
       Aligned_Position = pos,
       N = nrow(sub),
       R2_reduced = r2_reduced,
-      R2_partial = r2_partial,
-      R2_full = r2_full,
+      R2_res = r2_partial,
+      R2_emb = r2_full,
       P_res = p_res,
       P_emb = p_emb
     )
@@ -220,14 +220,14 @@ for (gene in genes_to_process) {
   
   if (length(results_list) > 0) {
     all_results_list[[gene]] <- rbindlist(results_list)
-    saveRDS(results_list, paste0("results/tmp_results_nested_", gene, ".rds"))
+    saveRDS(results_list, paste0("results/embStandalone/tmp_results_nested_", gene, ".rds"))
     message("Completed ", gene, ": ", length(results_list), " positions analyzed")
   } else {
     message("No positions retained for gene ", gene)
   }
 }
 
-saveRDS(all_results_list, "results/results_list_nested_all_genes.rds")
+saveRDS(all_results_list, "results/embStandalone/results_list_nested_all_genes.rds")
 message("\nSaved nested model results for ", length(all_results_list), " genes")
 
 
@@ -307,7 +307,7 @@ plot(res_df$Aligned_Position, -log10(res_df$P_res), col="white", main=gene)
 lines(res_df$Aligned_Position, -log10(res_df$P_res), col="orange")
 lines(res_df$Aligned_Position, -log10(res_df$P_emb), col="tomato")
 
-res_files <- list.files("results/", pattern = "tmp_results_nested_.*\\.rds$", full.names = TRUE)
+res_files <- list.files("results/embStandalone/", pattern = "tmp_results_nested_.*\\.rds$", full.names = TRUE)
 
 for (f in res_files) {
   res_list <- readRDS(f)
@@ -317,11 +317,11 @@ for (f in res_files) {
   #plot(-log10(res_df$P_res),-log10(res_df$P_emb))
   #text(-log10(res_df$P_res),-log10(res_df$P_emb), res_df$Aligned_Position)
   plot(res_df$Aligned_Position, -log10(res_df$P_res), col="white", main=gene_name,
-       ylim=c(0,1+max(c(-log10(res_df$P_res), -log10(res_df$P_emb)))),
+       ylim=c(0,2+max(c(-log10(res_df$P_res), -log10(res_df$P_emb)))),
        ylab="-log10(p)", xlab="Alignment Index")
-  lines(res_df$Aligned_Position, -log10(res_df$P_res), col="orange")
+  points(res_df$Aligned_Position, -log10(res_df$P_res), col="orange")
   lines(res_df$Aligned_Position, -log10(res_df$P_emb), col="tomato")
-  bf <- 0.05 / (2 * max(res_df$Aligned_Position))
+  #bf <- 0.05 / (2 * max(res_df$Aligned_Position))
   abline(h=-log10(bf), col="black", lty=2)
   
   points(res_df[-log10(res_df$P_res) > -log10(bf),]$Aligned_Position,
@@ -330,13 +330,13 @@ for (f in res_files) {
   
   legend(
     "topleft",
-    legend = c("Residue effect (P_res: residues | PCs)",
-                   "Embedding effect (P_emb: embeddings | residues + PCs)",
-                   "Bonferroni threshold (0.05 / (2 × seqLen))"),
+    legend = c("Residue p (residues | PCs)",
+                   "Embedding p (embeddings | residues + PCs)",
+                   "Bonferroni threshold"),
     col = c("orange", "tomato", "black"),
     lty = c(1, 1, 2),
     lwd = c(2, 2, 1),
-    bty = "n",  # remove box
+    bty = "y",  # remove box
     cex = 0.8
   )
 }
@@ -388,8 +388,10 @@ all_res <- all_res %>%
   mutate(pos_global = Aligned_Position + gene_offsets[gene])
 
 # Bonferroni threshold (using total sites)
-bf <- 0.05 / (2 * sum(gene_lengths$len))
+#bf <- 0.05 / (2 * sum(gene_lengths$len))
+bf <- 0.05 / (1 * sum(gene_lengths$len))
 ylim_max <- 1 + max(-log10(c(all_res$P_res, all_res$P_emb)), na.rm = TRUE)
+ylim_max <- 1 + max(-log10(c(all_res$P_res)), na.rm = TRUE)
 
 # Plot setup
 plot(all_res$pos_global, -log10(all_res$P_res),
@@ -404,6 +406,7 @@ plot(all_res$pos_global, -log10(all_res$P_res),
 gene_colors <- setNames(rep(c("steelblue3", "grey60"),
                             length.out = length(unique(all_res$gene))),
                         unique(all_res$gene))
+
 
 # Draw lines per gene
 for (g in unique(all_res$gene)) {
@@ -460,7 +463,7 @@ gene_name <- sub("tmp_results_nested_(.*)\\.rds$", "\\1", basename(f))
 res_df <- do.call(rbind, res_list)
   
 
-plot(res_df$Aligned_Position, -log10(res_df$P_res), col="white", main="psbA",
+plot(res_df$Aligned_Position, -log10(res_df$P_res), col="white", main="psbA residue associations",
      ylim=c(0,1+max(c(-log10(res_df$P_res), -log10(res_df$P_emb)))),
      ylab="-log10(p)", xlab="Alignment Index")
 lines(res_df$Aligned_Position, -log10(res_df$P_res), col="orange")
@@ -470,8 +473,21 @@ abline(h=-log10(bf), col="black", lty=2)
 
 points(res_df[-log10(res_df$P_res) > -log10(bf),]$Aligned_Position,
        -log10(res_df$P_res[-log10(res_df$P_res) > -log10(bf)]), col="orange",pch=16)
-#the big one is at position 155 in the protein, 207 in aln
+#the big one is at position 155 in the protein, 207 in aln T-->A
 #the second one is position 243, 303 in aln
+
+
+
+legend(
+  "topleft",
+  legend = c("Residue effect (residues | PCs)",
+             "Gene Bonferroni threshold"),
+  col = c("orange", "black"),
+  lty = c(1, 1, 2),
+  lwd = c(2, 2, 1),
+  bty = "n",  # remove box
+  cex = 0.8
+)
 
 e_prior <- 0
 for (i in 1:nrow(tm_df)) {
@@ -506,9 +522,9 @@ for (i in 1:nrow(feat_df)) {
 
 legend(
   "topleft",
-  legend = c("Residue effect (P_res: residues | PCs)",
-             "Embedding effect (P_emb: embeddings | residues + PCs)",
-             "Bonferroni threshold (0.05 / (2 × seqLen))"),
+  legend = c("Residue effect (residues | PCs)",
+             "Embedding effect (embeddings | residues + PCs)",
+             "Bonferroni threshold"),
   col = c("orange", "tomato", "black"),
   lty = c(1, 1, 2),
   lwd = c(2, 2, 1),
@@ -520,7 +536,7 @@ legend(
 ### align results to the residue index of the chloroplast proteins 
 
 # Reference ID for mapping
-at_ID <- "AP000423.1"
+at_ID <- "JX270811.1"
 
 # Get result files
 res_files <- list.files("results/", pattern = "tmp_results_nested_.*\\.rds$", full.names = TRUE)
@@ -603,15 +619,23 @@ stopifnot(length(mapped_results_list) > 0)
 all_mapped <- rbindlist(mapped_results_list)
 
 # Save as CSV
-out_file <- "results/reference_mapped_results.csv"
+out_file <- "/workdir/hdd29/chloroplast_genome_evaluation/data/speciesWork/Capsicum/capsicumPepo_reference_mapped_results.csv"
 fwrite(all_mapped, out_file)
 message("\nSaved reference-mapped results to: ", out_file)
 message("Total rows: ", nrow(all_mapped))
 
+quantile(all_mapped$P_res,0.1)
 
-
-
-
+qqplot(-log10(ppoints(length(all_mapped$P_res))),
+       -log10(sort(all_mapped$P_res)),
+       xlab="Expected -log10(p)",
+       ylab="Observed -log10(p)",
+       main="Chloroplast residue QQ plot")
+abline(0,1,col="red")
+cutoff = -log10(quantile(all_mapped$P_res,0.1))
+abline(v=cutoff,col="blue")
+text(cutoff, 10, "Proposed cuttoff: top decile", 
+     srt=90, adj=c(0,0), cex=1, col="blue")
 
 
 
@@ -696,8 +720,8 @@ all_res <- all_res %>%
   mutate(pos_global = Aligned_Position + gene_offsets[gene])
 
 # Bonferroni threshold (using total sites)
-bf <- 0.05 / (2 * sum(gene_lengths$len))
-ylim_max <- 1 + max(-log10(c(all_res$P_res, all_res$P_emb)), na.rm = TRUE)
+bf <- 0.05 / (1 * sum(gene_lengths$len))
+ylim_max <- 1 + max(-log10(all_res$P_res), na.rm = TRUE)
 
 # Plot setup
 plot(all_res$pos_global, -log10(all_res$P_res),
@@ -790,6 +814,67 @@ ggplot(a, aes(Aligned_Position, CVMRatio_smooth)) +
   theme_minimal(base_size=12) +
   labs(x="Aligned Position", y=expression(R^2)) +
   scale_x_continuous(limits=c(0,400))
+
+
+# ----  rbcL 
+
+# --- Map to your alignment ---
+os_ID <- data$ID[grep("Oryza sativa", data$Organism)]
+os_df <- df_joined %>%
+  filter(ID == os_ID) %>%
+  select(Residue_Index, Aligned_Position)
+
+os_start <- dplyr::rename(os_df, start_aln = Aligned_Position)
+os_end   <- dplyr::rename(os_df, end_aln = Aligned_Position)
+
+
+res_list <- readRDS("results/tmp_results_nested_rbcL.rds")
+res_df <- do.call(rbind, res_list)
+
+feat_json <- 'data/rbcL_features.json'
+feats <- as.data.frame(fromJSON(feat_json) ) 
+feat_df <- feats %>%
+  transmute(Residue_Index = features.location$start$value,
+            Label = features.ligand$name,
+            Desc = features.description) %>%
+  left_join(os_df, by="Residue_Index") %>%
+  filter(!is.na(Aligned_Position))
+
+plot(res_df$Aligned_Position, -log10(res_df$P_res), col="orange",
+     main="Rubisco large subunit (rbcL) temp associations",
+     ylim=c(0,1+max(c(-log10(res_df$P_res)))),
+     ylab="-log10(p)", xlab="Alignment Index")
+##lines(res_df$Aligned_Position, -log10(res_df$P_res), col="orange")
+#lines(res_df$Aligned_Position, -log10(res_df$P_emb), col="tomato")
+bf <- 0.05 / (1 * max(res_df$Aligned_Position))
+abline(h=-log10(bf), col="black", lty=2)
+
+points(res_df[-log10(res_df$P_res) > -log10(bf),]$Aligned_Position,
+       -log10(res_df$P_res[-log10(res_df$P_res) > -log10(bf)]), col="orange",pch=16)
+#text(305, 6, "DE-loop", col="tomato")
+
+for (i in 1:nrow(feat_df)) {
+  abline(v = feat_df[i,]$Aligned_Position, col="blue", lty=2, lwd=0.6)
+  #text(feat_df[i,]$Aligned_Position, 1.01, feat_df[i,]$Label, 
+  #     srt=90, adj=c(0,0), cex=0.8, col="black")
+  #text(feat_df[i,]$Aligned_Position-1, 15, feat_df[i,]$Desc, 
+  #     srt=90, adj=c(0,0), cex=2, col="black")
+}
+
+legend(
+  "topleft",
+  legend = c("Residue p value (residues | PCs)",
+             "Active, binding, or functional site",
+             "Bonferroni threshold"),
+  col = c("orange", "blue", "black"),
+  lty = c(1, 2, 2),
+  lwd = c(2, 2, 1),
+  cex = 0.8
+)
+
+#big guys are at aln 439 and 420
+
+
 
 
 

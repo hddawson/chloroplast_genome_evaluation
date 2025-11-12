@@ -5,8 +5,8 @@ mkdir -p /workdir/hdd29/tmp
 export TMP_BASE_DIR="/workdir/hdd29/tmp"
 
 # Set directories
-input_dir="/workdir/hdd29/chloroplast_genome_evaluation/data/speciesWork/At/genomes"
-final_dir="/workdir/hdd29/chloroplast_genome_evaluation/data/speciesWork/At/annotationResults/"
+input_dir="/workdir/hdd29/chloroplast_genome_evaluation/data/speciesWork/Capsicum/genomes"
+final_dir="/workdir/hdd29/chloroplast_genome_evaluation/data/speciesWork/Capsicum/annotationResults/"
 singularity_image="cpgavas2_0.03.sif"
 bind_dir="$input_dir"
 

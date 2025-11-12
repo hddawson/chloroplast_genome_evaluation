@@ -8,10 +8,10 @@ library(dplyr)
 # Load shared data once
 data <- read_parquet("data/processed_data.parquet")
 # Find matching embedding and alignment files
-emb <- read_parquet("data/embeddings/ndhG_residue_embeddings.parquet")
+emb <- read_parquet("data/embeddings/psbA_residue_embeddings.parquet")
 
 # Read alignment
-aln <- readAAStringSet("data/tmp/alignedGenes/ndhG_AA_aligned.fasta")
+aln <- readAAStringSet("data/tmp/alignedGenes/psbA_AA_aligned.fasta")
 
 # Get names and sequences
 seq_names <- names(aln)
@@ -47,7 +47,7 @@ count_diffs <- function(seq1, seq2) {
 
 # Pick a random reference sequence
 for (i in 1:5) {
-  set.seed(i)
+  set.seed(i*10)
   
   # Random reference sequence
   ref_idx <- sample(seq_len(nrow(mat)), 1)
@@ -63,7 +63,7 @@ for (i in 1:5) {
   for (j in valid_candidates) {
     if (j == ref_idx) next
     diffs <- count_diffs(ref_seq, mat[j, ])
-    if (diffs == 3) {
+    if (diffs == 2) {
       target_idx <- j
       break
     }
@@ -126,11 +126,11 @@ for (i in 1:5) {
     ungroup()
   
   # Plot cosine similarity with true residue index marked
-  p <- ggplot(emb_diff, aes(x = Alignment, y = cos_sim)) +
+  p <- ggplot(emb_diff, aes(x = Residue_Index, y = cos_sim)) +
     geom_line(color = "steelblue", linewidth = 0.8) +
     geom_vline(xintercept = ref_res_idx, color = "red", linetype = "dashed") +
-    labs(title = paste0("ndhG Cosine similarity: ", ref_clean, " vs ", target_clean),
-         subtitle = paste("Red dashed line = site of single amino acid difference (Residue", ref_res_idx, ")"),
+    labs(title = paste0("psbA embedding cosine similarity"),#, ref_clean, " vs ", target_clean),
+         subtitle = paste("Red dashed line = site of amino acid differences"),
          x = "Residue index",
          y = "Cosine similarity between embeddings") +
     theme_minimal(base_size = 13)
