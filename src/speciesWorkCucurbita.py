@@ -1,14 +1,11 @@
 import pandas as pd
-import sys
 import os
 import matplotlib.pyplot as plt
-import re 
 from tqdm import tqdm
-import seaborn as sns
 from Bio import SeqIO
-from Bio import SeqUtils
 import numpy as np
 import shutil
+from itertools import combinations
 
 import os
 from Bio import SeqIO
@@ -250,6 +247,220 @@ def summarize_significant_variants(mapped_df, p_threshold):
     
     return sig
 
+def identify_optimal_crosses(mapped_df, p_threshold, n_crosses=10):
+    """
+    Identify sample pairs that maximize differences at significant sites.
+    Returns ranked cross combinations based on variant differences.
+    """
+    
+    # Filter to significant sites only
+    sig_sites = mapped_df[mapped_df['is_significant'] == True].copy()
+    
+    assert len(sig_sites) > 0, "No significant sites found"
+    
+    # Reload alignments to get per-sample genotypes at significant sites
+    aln_dir = "data/speciesWork/Cucurbita/alignedProteins/"
+    
+    genotypes = {}  # {(gene, residue_idx): {sample: allele}}
+    site_info = {}  # {(gene, residue_idx): {'p_value': x, 'R2': y}}
+    samples = set()
+    
+    for _, row in tqdm(sig_sites.iterrows(), total=len(sig_sites), desc="Loading genotypes"):
+        gene = row['gene']
+        res_idx = row['residue_index']
+        
+        site_info[(gene, res_idx)] = {
+            'p_value': row['P_res'],
+            'R2_partial': row['R2_partial']
+        }
+        
+        # Try multiple possible alignment file names
+        possible_files = [f"{gene}.fasta", f"{gene}_aligned.fasta"]
+        aln_path = None
+        
+        for fname in possible_files:
+            test_path = os.path.join(aln_dir, fname)
+            if os.path.exists(test_path):
+                aln_path = test_path
+                break
+        
+        if not aln_path:
+            continue
+            
+        aln = list(SeqIO.parse(aln_path, 'fasta'))
+        
+        for record in aln:
+            sample = record.id.split('_')[0]
+            samples.add(sample)
+            
+            seq = str(record.seq).upper()
+            non_gap_pos = [i for i, c in enumerate(seq) if c != '-']
+            
+            if res_idx <= len(non_gap_pos):
+                allele = seq[non_gap_pos[res_idx - 1]]
+                
+                if (gene, res_idx) not in genotypes:
+                    genotypes[(gene, res_idx)] = {}
+                genotypes[(gene, res_idx)][sample] = allele
+    
+    samples = sorted(samples)
+    print(f"Found {len(samples)} samples across {len(genotypes)} significant sites")
+    
+    assert len(samples) > 1, "Need at least 2 samples for crosses"
+    assert len(genotypes) > 0, "No genotype data found"
+    
+    # Calculate pairwise differences with details
+    from itertools import combinations
+    
+    cross_scores = []
+    
+    for sample1, sample2 in tqdm(list(combinations(samples, 2)), desc="Evaluating crosses"):
+        differences = []
+        
+        for site, alleles in genotypes.items():
+            if sample1 in alleles and sample2 in alleles:
+                if alleles[sample1] != alleles[sample2]:
+                    gene, res_idx = site
+                    differences.append({
+                        'gene': gene,
+                        'residue': res_idx,
+                        'parent1_allele': alleles[sample1],
+                        'parent2_allele': alleles[sample2],
+                        'p_value': site_info[site]['p_value']
+                    })
+        
+        if len(differences) > 0:
+            # Create formatted string of differences
+            diff_details = '; '.join([
+                f"{d['gene']}:{d['residue']}({d['parent1_allele']}/{d['parent2_allele']},P={d['p_value']:.2e})"
+                for d in sorted(differences, key=lambda x: x['p_value'])
+            ])
+            
+            cross_scores.append({
+                'parent1': sample1,
+                'parent2': sample2,
+                'n_differences': len(differences),
+                'pct_different': 100 * len(differences) / len(genotypes),
+                'differences': diff_details
+            })
+    
+    assert len(cross_scores) > 0, "No valid crosses found"
+    
+    cross_df = pd.DataFrame(cross_scores).sort_values('n_differences', ascending=False)
+    
+    print(f"\n=== TOP {n_crosses} CROSSES ===")
+    for i, row in cross_df.head(n_crosses).iterrows():
+        print(f"\n{row['parent1']} x {row['parent2']}: {row['n_differences']} differences ({row['pct_different']:.1f}%)")
+        print(f"  {row['differences']}")
+    
+    return cross_df
+
+def plot_allele_heatmap(crosses_df, mapped_df, n_crosses=10):
+    """
+    Create an alignment-style plot showing alleles at significant sites for top crosses
+    """
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import ListedColormap
+    
+    # Get unique parents from top crosses
+    top_crosses = crosses_df.head(n_crosses)
+    parents = set()
+    for _, row in top_crosses.iterrows():
+        parents.add(row['parent1'])
+        parents.add(row['parent2'])
+    parents = sorted(parents)
+    
+    # Get significant sites sorted by P-value
+    sig_sites = mapped_df[mapped_df['is_significant'] == True].copy()
+    sig_sites = sig_sites.sort_values('P_res')
+    
+    # Reload genotypes for significant sites
+    aln_dir = "data/speciesWork/Cucurbita/alignedProteins/"
+    genotypes = {}
+    site_info = []
+    
+    for _, row in tqdm(sig_sites.iterrows(), total=len(sig_sites), desc="Loading genotypes"):
+        gene = row['gene']
+        res_idx = row['residue_index']
+        
+        possible_files = [f"{gene}.fasta", f"{gene}_aligned.fasta"]
+        aln_path = None
+        
+        for fname in possible_files:
+            test_path = os.path.join(aln_dir, fname)
+            if os.path.exists(test_path):
+                aln_path = test_path
+                break
+        
+        if not aln_path:
+            continue
+        
+        site_info.append({
+            'gene': gene,
+            'residue': res_idx,
+            'p_value': row['P_res']
+        })
+        
+        aln = list(SeqIO.parse(aln_path, 'fasta'))
+        
+        for record in aln:
+            sample = record.id.split('_')[0]
+            if sample not in parents:
+                continue
+                
+            seq = str(record.seq).upper()
+            non_gap_pos = [i for i, c in enumerate(seq) if c != '-']
+            
+            if res_idx <= len(non_gap_pos):
+                allele = seq[non_gap_pos[res_idx - 1]]
+                if sample not in genotypes:
+                    genotypes[sample] = []
+                genotypes[sample].append(allele)
+    
+    # Get organism names
+    id_to_organism = cucurbita_data.set_index('FileBasename')['Organism'].to_dict()
+    
+    # Create figure
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(len(site_info)*0.5, len(parents)*0.4 + 2),
+                                   gridspec_kw={'height_ratios': [1, len(parents)]})
+    
+    # Top panel: P-values
+    p_values = [s['p_value'] for s in site_info]
+    ax1.bar(range(len(p_values)), -np.log10(p_values), color='steelblue', alpha=0.7)
+    ax1.set_ylabel('-log10(P)', fontsize=10)
+    ax1.set_xlim(-0.5, len(site_info) - 0.5)
+    ax1.set_xticks([])
+    ax1.grid(axis='y', alpha=0.3)
+    
+    # Bottom panel: Allele display
+    ax2.set_xlim(-0.5, len(site_info) - 0.5)
+    ax2.set_ylim(-0.5, len(parents) - 0.5)
+    
+    # Add alleles as text
+    for i, sample in enumerate(parents):
+        if sample in genotypes:
+            for j, allele in enumerate(genotypes[sample]):
+                ax2.text(j, i, allele, ha='center', va='center', 
+                        fontsize=8, family='monospace', weight='bold')
+    
+    # Set labels
+    site_labels = [f"{s['gene']}\n{s['residue']}" for s in site_info]
+    ax2.set_xticks(range(len(site_labels)))
+    ax2.set_xticklabels(site_labels, fontsize=8)
+    
+    organism_labels = [id_to_organism.get(p, p).replace('Cucurbita ', '') for p in parents]
+    ax2.set_yticks(range(len(organism_labels)))
+    ax2.set_yticklabels(organism_labels, fontsize=9)
+    
+    ax2.set_xlabel('Gene:Residue', fontsize=10)
+    ax2.grid(True, alpha=0.2)
+    
+    plt.suptitle('Alleles at significant sites in Cucurbita accessions', fontsize=12, y=0.995)
+    plt.tight_layout()
+    plt.savefig('data/speciesWork/Cucurbita/allele_alignment.png', dpi=300, bbox_inches='tight')
+    plt.show()
+    
+    print(f"Saved allele alignment plot")
 
 
 if __name__ == "__main__":
@@ -277,3 +488,72 @@ if __name__ == "__main__":
 
     # Summarize significant variants
     sig_variants = summarize_significant_variants(mapped_df, p_threshold)
+
+    crosses_df = identify_optimal_crosses(mapped_df, p_threshold, n_crosses=10)
+
+    id_to_organism = cucurbita_data.set_index('FileBasename')['Organism'].to_dict()
+    print(id_to_organism)
+
+    crosses_df['parent1_organism'] = crosses_df['parent1'].map(id_to_organism)
+    crosses_df['parent2_organism'] = crosses_df['parent2'].map(id_to_organism)
+
+    crosses_df.to_csv('data/speciesWork/Cucurbita/optimal_crosses.csv', index=False)
+
+    # Plot cross comparisons
+    plot_allele_heatmap(crosses_df, mapped_df, n_crosses=10)
+
+
+    ###getting rna for moschata - expect the V allele in rbcL 
+    #prefetch SRR5369792
+    """fasterq-dump SRR5369792 \
+        --split-files \
+        --skip-technical \
+        -O fastq_fixed/"""
+    """programs/bbmap-39.10/repair.sh in1=fastq/SRR5369792_1.fastq in2=fastq/SRR5369792_2.fastq \
+          out1=fastq/R1.sync.fq out2=fastq/R2.sync.fq \
+          outs=fastq/singletons.fq"""
+    #mkdir -p trimmed
+
+    """/programs/fastp-0.23.4/fastp \
+        -i fastq/R1.sync.fq \
+        -I fastq/R2.sync.fq \
+        -o trimmed/1.fq \
+        -O trimmed/2.fq"""
+    
+    #mv data/speciesWork/Cucurbita/genomes/MF9911161.fa ref.fasta
+    # bwa index ref.fasta
+    # samtools faidx ref.fasta
+    # bwa mem -t 32 ref.fasta fastq/R1.sync.fq fastq/R2.sync.fq | samtools sort -o aln.sorted.bam
+
+    #samtools flagstat aln.sorted.bam produces:
+            """hloroplast_genome_evaluation]$ samtools flagstat aln.sorted.bam
+        73996122 + 0 in total (QC-passed reads + QC-failed reads)
+        73988674 + 0 primary
+        0 + 0 secondary
+        7448 + 0 supplementary
+        0 + 0 duplicates
+        0 + 0 primary duplicates
+        339047 + 0 mapped (0.46% : N/A)
+        331599 + 0 primary mapped (0.45% : N/A)
+        73988674 + 0 paired in sequencing
+        36994337 + 0 read1
+        36994337 + 0 read2
+        304580 + 0 properly paired (0.41% : N/A)
+        316630 + 0 with itself and mate mapped
+        14969 + 0 singletons (0.02% : N/A)
+        0 + 0 with mate mapped to a different chr
+        0 + 0 with mate mapped to a different chr (mapQ>=5)
+        """
+
+    #samtools flagstat aln.sorted.bam
+    # samtools index aln.sorted.bam
+
+    #samtools faidx ref.fasta
+
+
+    #checking that there is no crazy SNP stuff
+    #cat data/speciesWork/Cucurbita/genomes/*.fa > data/speciesWork/Cucurbita/all_genomes.fa
+    """
+    /programs/mafft/bin/mafft \
+        --adjustdirection --thread 4 --auto --treeout \
+        data/speciesWork/Cucurbita/all_sequences.fa > data/speciesWork/Cucurbita/all_sequences_aligned.fa"""

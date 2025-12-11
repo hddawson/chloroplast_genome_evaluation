@@ -22,3 +22,8 @@ dataset
 tree/*
 notebooks/.ipynb_checkpoints/*
 pfam_results/*
+NetSurfP-3.0_standalone/*
+fastq/*
+*.zip
+*.sif
+trimmed/*

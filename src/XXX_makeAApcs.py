@@ -85,14 +85,14 @@ def produce_supermatrix(lui_list, aln_files, output_file):
     #initialize the mapping
     mapping = pd.DataFrame(columns=["site", "gene"])
     #iterate over the alignments
-    for aln_file in tqdm(aln_files):
+    for aln_file in aln_files:
         filtered_records = [
             record
             for record in SeqIO.parse(aln_file, "fasta")
             if record.id.split("|")[0] in lui_list
         ]
         #get the alignment
-        for record in filtered_records:
+        for record in tqdm(filtered_records):
             #get the sample name
             sample_name = record.id.split("|")[0]
             #get the sequence
@@ -112,6 +112,7 @@ def produce_supermatrix(lui_list, aln_files, output_file):
             if len(supermatrix[lui]) < max_length:
                 #pad with gaps
                 supermatrix[lui] += '-' * (max_length - len(supermatrix[lui]))
+
     #save the supermatrix
     with open(output_file, 'w') as f:
         for lui in lui_list:
@@ -122,49 +123,29 @@ def produce_supermatrix(lui_list, aln_files, output_file):
     mapping.to_csv(output_file + "_mapping.csv", index=False)
 
 def get_sites_from_alignment_fasta(aln_file, samples_per_site=0.9):
-    """
-    prepare an alignment for an association study
-    :param aln_file: path to alignment file
-    :param samples_per_site: minimum proportion of samples with a site to keep it
-
-    :return: a pandas DataFrame with the alignment, where each column is a site and each row is a sample
-    #the column names should be fastaFileBasename_idx 
-    """
-    # read the alignment
     aln = list(SeqIO.parse(aln_file, 'fasta'))
-    # get the alignment length
     aln_len = len(aln[0].seq)
 
-    #assert that all sequences have the same length
-    for record in aln:
-        assert len(record.seq) == aln_len, 'Sequences have different lengths'
+    seqs = []
+    ids = []
+    for rec in aln:
+        s = str(rec.seq).upper()
+        if len(s) != aln_len: continue
+        if s.replace('-', '') == '': continue
+        seqs.append(list(s))
+        ids.append(rec.id.split('_')[0])
 
-    # create a dictionary to store the alignment
-    aln_dict = {i: [''] * aln_len for i in range(len(aln))}
+    aln_df = pd.DataFrame(seqs, index=ids)
+    base = os.path.basename(aln_file).split('.')[0]
+    aln_df.columns = [f"{base}_{i}" for i in aln_df.columns]
 
-    # fill the dictionary
-    for i, record in tqdm(enumerate(aln)):
-        aln_dict[i] = list(record.seq.upper())
-
-    # create a DataFrame
-    aln_df = pd.DataFrame(aln_dict).T
-
-    # rename the columns
-    fastabasename = os.path.basename(aln_file).split(".")[0]
-    aln_df.columns = [f"{fastabasename}_{i}" for i in aln_df.columns]
-
-    #rename the rows
-    aln_df.index = [record.id.split("_")[0] for record in aln]
-
-    # remove sites with too many missing data (encoded as "-", or gaps )
-    print("Removing sites with too many missing data")
-    print("Before removing sites:", aln_df.shape)
-    #remove sites with too many missing data
+    #print shape before filtering
+    print("Alignment shape before filtering:", aln_df.shape)
     aln_df = aln_df.loc[:, (aln_df == '-').mean() < (1 - samples_per_site)]
-
-    print("After removing sites:", aln_df.shape)
+    print("Alignment shape after filtering:", aln_df.shape)
 
     return aln_df
+
 
 def encode_using_pcas(aln_df, pcs,pc_limit=3):
     """
@@ -303,37 +284,21 @@ def encode_onehot_alleles_vectorized(aln_df, alleles=['A', 'T', 'C', 'G'], missi
     return result_df
 
 if __name__ == "__main__":
+    #data = pd.read_parquet("data/processed_data.parquet")
+    #LUI_list = data['ID'].unique().tolist()
 
-    #outfile = "data/aaindex1.csv"
-    #download_all_idxs_to_csv(outfile)
+    #aln_files = glob.glob("data/tmp/alignedGenes/*_AA_aligned.fasta")
+    #produce_supermatrix(LUI_list, aln_files, "data/tmp/aa_supermatrix.fasta")
 
-    #aa_pcs = pd.read_csv("data/aaPCs.csv")
+    #need to do this cuz i changed my data processing to look at some species I didn't align, so they pull up as all gaps 
+    #awk '!(toupper($0) ~ /^[N\-]+$/)' data/tmp/aa_supermatrix.fasta > data/tmp/aa_supermatrix_filtered.fasta
 
-    #master_df = pd.read_parquet("data/processed_data.parquet")
-    #lui_list = master_df["ID"].unique().tolist()
+    #aln_df = get_sites_from_alignment_fasta("data/tmp/aa_supermatrix.fasta", samples_per_site=0.95)
+    #save the residue aln df 
+    #aln_df.to_parquet("data/tmp/aa_supermatrix_sites.parquet")
 
-    #aln_files = glob.glob("data/tmp/alignedGenes/*CDS_aligned.fasta")
+    df = pd.read_parquet("data/tmp/aa_supermatrix_sites.parquet")
+    n = (df.apply(lambda col: col[col != '-'].nunique()) == 1).sum()
+    print(n)
 
-    #produce_supermatrix(lui_list, aln_files, "data/tmp/cds_supermatrix.fasta")
 
-    aln_df = get_sites_from_alignment_fasta("data/tmp/cds_supermatrix.fasta", samples_per_site=0.95)
-
-    #save the aln_df
-    #aln_df = pd.read_parquet("data/tmp/cds_supermatrix.parquet")
-
-    #expand the supermatrix
-
-    majMinor_df = encode_onehot_anyvar(aln_df)
-    majMinor_df.to_parquet("data/tmp/majMinor_aln.pq")
-
-    #print("One-hot encoding the alleles")
-    #onehot_df = encode_onehot_alleles_vectorized(aln_df)
-    #onehot_df.to_parquet("data/tmp/onehot_aln.pq", index=True)
-
-    #save the expanded df
-    #expanded_df.to_csv("data/tmp/aa_supermatrix_expanded_3pcs.csv", index=True)
-
-    #expanded_df = encode_using_pcas(aln_df, aa_pcs, pc_limit=10)
-
-    #save the expanded df
-    #expanded_df.to_csv("data/tmp/aa_supermatrix_expanded_10pcs.csv", index=True)

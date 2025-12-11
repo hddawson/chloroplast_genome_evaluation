@@ -1,14 +1,11 @@
 import pandas as pd
-import sys
 import os
 import matplotlib.pyplot as plt
-import re 
 from tqdm import tqdm
-import seaborn as sns
 from Bio import SeqIO
-from Bio import SeqUtils
 import numpy as np
 import shutil
+from itertools import combinations
 
 import os
 from Bio import SeqIO
@@ -23,7 +20,7 @@ def write_proteins_by_gene():
     proteins = defaultdict(list)
 
     # Read all protein fasta files
-    fasta_dir = "data/speciesWork/Capsicum/proteinFastas/"
+    fasta_dir = "data/speciesWork/ZeaMays/proteinFastas/"
     for fasta_file in os.listdir(fasta_dir):
         if not fasta_file.endswith(".fasta"):
             continue
@@ -43,7 +40,7 @@ def write_proteins_by_gene():
             proteins[protein_name].append(record)
 
     # Write protein-specific fastas
-    out_dir = "data/speciesWork/Capsicum/proteinsByGene/"
+    out_dir = "data/speciesWork/ZeaMays/proteinsByGene/"
     os.makedirs(out_dir, exist_ok=True)
 
     for protein_name, records in proteins.items():
@@ -83,7 +80,7 @@ def get_gene_category(gene_name):
 def count_polymorphisms():
 
     # Process all alignments
-    aln_dir = "data/speciesWork/Capsicum/alignedProteins/"
+    aln_dir = "data/speciesWork/ZeaMays/alignedProteins/"
     results = []
 
     for aln_file in tqdm(sorted(os.listdir(aln_dir))):
@@ -117,7 +114,7 @@ def count_polymorphisms():
                     color=colors[category], label=category, alpha=0.7)
     axes[0, 0].set_xlabel('Gene')
     axes[0, 0].set_ylabel('Polymorphic residues per gene')
-    axes[0, 0].set_title('Residue Polymorphisms across 18 Capsicum accessions')
+    axes[0, 0].set_title('Residue Polymorphisms across 18 ZeaMays accessions')
     axes[0, 0].legend()
 
     # Polymorphism rate by category
@@ -149,7 +146,7 @@ def count_polymorphisms():
     axes[1, 1].legend()
 
     plt.tight_layout()
-    plt.savefig('data/speciesWork/Capsicum/gene_polymorphisms.png', dpi=300)
+    plt.savefig('data/speciesWork/ZeaMays/gene_polymorphisms.png', dpi=300)
     plt.show()
 
     print(f"\nTotal genes: {len(results_df)}")
@@ -159,20 +156,19 @@ def count_polymorphisms():
     print(results_df.groupby('category')[['polymorphic_sites', 'poly_rate']].mean())
 
 def copy_genomes():
-    for index, row in pepita_data.iterrows():
+    for index, row in ZeaMays_data.iterrows():
         file_name = row["FileBasename"] + ".fa"
         src = os.path.join("data/genomes", file_name)
-        dst_dir = "data/speciesWork/Capsicum/genomes"
+        dst_dir = "data/speciesWork/ZeaMays/genomes"
         os.makedirs(dst_dir, exist_ok=True)
         dst = os.path.join(dst_dir, file_name)
         
         assert os.path.exists(src), f"File {src} does not exist"
         shutil.copy2(src, dst)
 
-
 def extract_variants_from_alignments():
-    """Extract polymorphic sites from Capsicum protein alignments"""
-    aln_dir = "data/speciesWork/Capsicum/alignedProteins/"
+    """Extract polymorphic sites from ZeaMays protein alignments"""
+    aln_dir = "data/speciesWork/ZeaMays/alignedProteins/"
     
     variants = []
     
@@ -209,7 +205,7 @@ def extract_variants_from_alignments():
 
 
 def map_association_scores(variants_df, results_file='results/reference_mapped_results.csv'):
-    """Map association P-values from modeling results to Capsicum variants"""
+    """Map association P-values from modeling results to ZeaMays variants"""
     
     assert os.path.exists(results_file), f"Results file {results_file} not found"
     
@@ -235,7 +231,7 @@ def summarize_significant_variants(mapped_df, p_threshold):
     
     sig = mapped_df[mapped_df['is_significant'] == True].copy()
     
-    print(f"\n=== Capsicum VARIANT ANALYSIS ===")
+    print(f"\n=== ZeaMays VARIANT ANALYSIS ===")
     print(f"Total polymorphic sites: {len(mapped_df)}")
     print(f"Sites with association data: {mapped_df['P_res'].notna().sum()}")
     print(f"Significant sites (P_res < {p_threshold:.2e}): {len(sig)}")
@@ -251,7 +247,6 @@ def summarize_significant_variants(mapped_df, p_threshold):
     
     return sig
 
-
 def identify_optimal_crosses(mapped_df, p_threshold, n_crosses=10):
     """
     Identify sample pairs that maximize differences at significant sites.
@@ -264,7 +259,7 @@ def identify_optimal_crosses(mapped_df, p_threshold, n_crosses=10):
     assert len(sig_sites) > 0, "No significant sites found"
     
     # Reload alignments to get per-sample genotypes at significant sites
-    aln_dir = "data/speciesWork/Capsicum/alignedProteins/"
+    aln_dir = "data/speciesWork/ZeaMays/alignedProteins/"
     
     genotypes = {}  # {(gene, residue_idx): {sample: allele}}
     site_info = {}  # {(gene, residue_idx): {'p_value': x, 'R2': y}}
@@ -380,7 +375,7 @@ def plot_allele_heatmap(crosses_df, mapped_df, n_crosses=10):
     sig_sites = sig_sites.sort_values('P_res')
     
     # Reload genotypes for significant sites
-    aln_dir = "data/speciesWork/Capsicum/alignedProteins/"
+    aln_dir = "data/speciesWork/ZeaMays/alignedProteins/"
     genotypes = {}
     site_info = []
     
@@ -423,7 +418,7 @@ def plot_allele_heatmap(crosses_df, mapped_df, n_crosses=10):
                 genotypes[sample].append(allele)
     
     # Get organism names
-    id_to_organism = pepita_data.set_index('FileBasename')['Organism'].to_dict()
+    id_to_organism = ZeaMays_data.set_index('FileBasename')['Organism'].to_dict()
     
     # Create figure
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(len(site_info)*0.5, len(parents)*0.4 + 2),
@@ -453,16 +448,16 @@ def plot_allele_heatmap(crosses_df, mapped_df, n_crosses=10):
     ax2.set_xticks(range(len(site_labels)))
     ax2.set_xticklabels(site_labels, fontsize=8)
     
-    organism_labels = [id_to_organism.get(p, p).replace('Capsicum ', '') for p in parents]
+    organism_labels = [id_to_organism.get(p, p).replace('ZeaMays ', '') for p in parents]
     ax2.set_yticks(range(len(organism_labels)))
     ax2.set_yticklabels(organism_labels, fontsize=9)
     
     ax2.set_xlabel('Gene:Residue', fontsize=10)
     ax2.grid(True, alpha=0.2)
     
-    plt.suptitle('Alleles at significant sites in Capsicum accessions', fontsize=12, y=0.995)
+    plt.suptitle('Alleles at significant sites in ZeaMays accessions', fontsize=12, y=0.995)
     plt.tight_layout()
-    plt.savefig('data/speciesWork/Capsicum/allele_alignment.png', dpi=300, bbox_inches='tight')
+    plt.savefig('data/speciesWork/ZeaMays/allele_alignment.png', dpi=300, bbox_inches='tight')
     plt.show()
     
     print(f"Saved allele alignment plot")
@@ -472,39 +467,39 @@ if __name__ == "__main__":
 
     tax_data = pd.read_csv("data/taxonomy_info.csv")
 
-    #find all entries with Capsicum in the organism name
-    pepita_data = tax_data[tax_data["Organism"].str.contains("Capsicum")]
+    #find all entries with ZeaMays in the organism name
+    ZeaMays_data = tax_data[tax_data["Organism"].str.contains("Zea mays", case=False, na=False)].copy()
 
-    print(pepita_data)
     #copy_genomes()
 
-    #ls data/speciesWork/Capsicum/genomes/ > data/speciesWork/Capsicum/annotationList.txt
-    #src/2_annotate.sh data/speciesWork/Capsicum/annotationList.txt
-    #mkdir data/speciesWork/Capsicum/proteinFastas
-    #cp  data/speciesWork/Capsicum/annotationResults/*/*/*Protein.fasta  data/speciesWork/Capsicum/proteinFastas/
+    #ls data/speciesWork/ZeaMays/genomes/ > data/speciesWork/ZeaMays/annotationList.txt
+    #src/2_annotate.sh data/speciesWork/ZeaMays/annotationList.txt
+    #mkdir data/speciesWork/ZeaMays/proteinFastas
+    #cp  data/speciesWork/ZeaMays/annotationResults/*/*/*Protein.fasta  data/speciesWork/ZeaMays/proteinFastas/
+    
+    #src/alignerIntraspecific.sh (make sure to modify the script to point to the correct directories)
     write_proteins_by_gene()
-    count_polymorphisms()
+    #count_polymorphisms()
 
     variants_df = extract_variants_from_alignments()
-    variants_df.to_csv('data/speciesWork/Capsicum/variants.csv', index=False)
+    variants_df.to_csv('data/speciesWork/ZeaMays/variants.csv', index=False)
 
     # Map association scores
-    mapped_df, p_threshold = map_association_scores(variants_df, results_file="data/speciesWork/Capsicum/capsicum_reference_mapped_results.csv")
-    mapped_df.to_csv('data/speciesWork/Capsicum/variants_with_scores.csv', index=False)
+    mapped_df, p_threshold = map_association_scores(variants_df, results_file="data/speciesWork/ZeaMays/ZeaMays_reference_mapped_results.csv")
+    mapped_df.to_csv('data/speciesWork/ZeaMays/variants_with_scores.csv', index=False)
 
     # Summarize significant variants
     sig_variants = summarize_significant_variants(mapped_df, p_threshold)
 
-
     crosses_df = identify_optimal_crosses(mapped_df, p_threshold, n_crosses=10)
 
-    id_to_organism = pepita_data.set_index('FileBasename')['Organism'].to_dict()
+    id_to_organism = ZeaMays_data.set_index('FileBasename')['Organism'].to_dict()
     print(id_to_organism)
 
     crosses_df['parent1_organism'] = crosses_df['parent1'].map(id_to_organism)
     crosses_df['parent2_organism'] = crosses_df['parent2'].map(id_to_organism)
 
-    crosses_df.to_csv('data/speciesWork/Capsicum/optimal_crosses.csv', index=False)
+    crosses_df.to_csv('data/speciesWork/ZeaMays/optimal_crosses.csv', index=False)
 
     # Plot cross comparisons
     plot_allele_heatmap(crosses_df, mapped_df, n_crosses=10)

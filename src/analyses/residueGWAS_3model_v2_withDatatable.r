@@ -307,13 +307,13 @@ plot(res_df$Aligned_Position, -log10(res_df$P_res), col="white", main=gene)
 lines(res_df$Aligned_Position, -log10(res_df$P_res), col="orange")
 lines(res_df$Aligned_Position, -log10(res_df$P_emb), col="tomato")
 
-res_files <- list.files("results/embStandalone/", pattern = "tmp_results_nested_.*\\.rds$", full.names = TRUE)
+res_files <- list.files("results/", pattern = "tmp_results_nested_.*\\.rds$", full.names = TRUE)
 
 for (f in res_files) {
   res_list <- readRDS(f)
   gene_name <- sub("tmp_results_nested_(.*)\\.rds$", "\\1", basename(f))
   res_df <- do.call(rbind, res_list)
-  summary(res_df)
+  res_df <- na.omit(res_df)
   #plot(-log10(res_df$P_res),-log10(res_df$P_emb))
   #text(-log10(res_df$P_res),-log10(res_df$P_emb), res_df$Aligned_Position)
   plot(res_df$Aligned_Position, -log10(res_df$P_res), col="white", main=gene_name,
@@ -534,9 +534,11 @@ legend(
 
 
 ### align results to the residue index of the chloroplast proteins 
+#data$Organism[grep("Zea mays", data$Organism)]
+
 
 # Reference ID for mapping
-at_ID <- "JX270811.1"
+at_ID <- "ON012183.1"
 
 # Get result files
 res_files <- list.files("results/", pattern = "tmp_results_nested_.*\\.rds$", full.names = TRUE)
@@ -619,7 +621,7 @@ stopifnot(length(mapped_results_list) > 0)
 all_mapped <- rbindlist(mapped_results_list)
 
 # Save as CSV
-out_file <- "/workdir/hdd29/chloroplast_genome_evaluation/data/speciesWork/Capsicum/capsicumPepo_reference_mapped_results.csv"
+out_file <- "/workdir/hdd29/chloroplast_genome_evaluation/data/speciesWork/Salix/Salix_reference_mapped_results.csv"
 fwrite(all_mapped, out_file)
 message("\nSaved reference-mapped results to: ", out_file)
 message("Total rows: ", nrow(all_mapped))
