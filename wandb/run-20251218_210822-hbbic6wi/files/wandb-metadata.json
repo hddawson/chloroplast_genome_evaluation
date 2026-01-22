@@ -1,0 +1,28 @@
+{
+  "os":  "Linux-5.19.17-x86_64-with-glibc2.34",
+  "python":  "CPython 3.13.9",
+  "startedAt":  "2025-12-19T02:08:22.939732Z",
+  "program":  "/local/workdir/hdd29/chloroplast_genome_evaluation/src/util_raxWatcher.py",
+  "codePath":  "src/util_raxWatcher.py",
+  "codePathLocal":  "src/util_raxWatcher.py",
+  "git":  {
+    "remote":  "git@github.com:hddawson/chloroplast_genome_evaluation.git",
+    "commit":  "7c3836cdeddd754dfca971b3ba644568ac050441"
+  },
+  "email":  "hdd29@cornell.edu",
+  "root":  "/local/workdir/hdd29/chloroplast_genome_evaluation",
+  "host":  "cbsulm24.biohpc.cornell.edu",
+  "executable":  "/local/workdir/hdd29/chloroplast_genome_evaluation/.pixi/envs/default/bin/python",
+  "cpu_count":  44,
+  "cpu_count_logical":  88,
+  "disk":  {
+    "/":  {
+      "total":  "321965260800",
+      "used":  "49137278976"
+    }
+  },
+  "memory":  {
+    "total":  "540127846400"
+  },
+  "writerId":  "20ubbyowfdn0nsfcn3ivdpkcyxetw9wm"
+}

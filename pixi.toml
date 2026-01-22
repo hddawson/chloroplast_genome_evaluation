@@ -54,9 +54,10 @@ r-domc = ">=1.3.8,<2"
 rpds-py = ">=0.28.0,<0.29"
 r-zoo = ">=1.8_14,<2"
 gw = { version = "*", channel = "bioconda" }
+wandb = ">=0.23.1,<0.24"
 
 [pypi-dependencies]
-biopython = ">=1.85, <2"
+biopython = ">=1.86, <2"
 numpy = ">=2.3.1, <3"
 pandas = ">=2.3.1, <3"
 tqdm = ">=4.67.1, <5"
@@ -65,3 +66,4 @@ matplotlib = ">=3.10.3, <4"
 seaborn = ">=0.13.2, <0.14"
 aaindex = ">=1.1.2, <2"
 pybiolib = ">=1.2.1308, <2"
+evcouplings = ">=0.2.1, <0.3"
