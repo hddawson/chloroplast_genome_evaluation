@@ -27,3 +27,5 @@ fastq/*
 *.zip
 *.sif
 trimmed/*
+
+wandb/*
