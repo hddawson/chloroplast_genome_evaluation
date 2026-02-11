@@ -2,14 +2,13 @@ library(arrow)
 library(data.table)
 library(Biostrings)
 
-# ---------------------------------------------------------------------
 # LOAD COMMON DATA
-# ---------------------------------------------------------------------
-
 data <- as.data.table(read_parquet("data/processed_data.parquet"))
 pheno_col <- "pheno_wc2.1_2.5m_bio_8_p50"
 
 ev_pcs <- readRDS("data/tmp/majMinor_aln_pca.rds")
+pvar <- ev_pcs$sdev^2 / sum(ev_pcs$sdev^2)
+pvar[1:10]
 aln_index <- read_parquet("data/tmp/majMinor_aln.pq")
 
 embeds_with_mds <- readRDS("data/tmp/embeds_with_mds.rds")
@@ -35,9 +34,7 @@ all_pc_names <- paste0("PC", seq_len(max_pcs))
 pheno_pcs_full <- data[, .(ID, pheno = get(pheno_col))][scores, on = "ID", nomatch = 0]
 stopifnot(nrow(pheno_pcs_full) > 0)
 
-# ---------------------------------------------------------------------
 # PREPARE FILE LISTS
-# ---------------------------------------------------------------------
 
 aln_files <- list.files("data/tmp/alignedGenes/", pattern = "_AA_aligned\\.fasta$", full.names = TRUE)
 get_gene <- function(path) sub("_AA_aligned\\.fasta", "", basename(path))
@@ -46,9 +43,8 @@ stopifnot(length(genes_to_process) > 0)
 
 message("Processing ", length(genes_to_process), " genes")
 
-# ---------------------------------------------------------------------
+
 # N_PCS EXPERIMENT SETUP
-# ---------------------------------------------------------------------
 
 # Define n_pcs values: 0, 250, 500, ..., up to max_pcs
 n_pcs_values <- seq(0, max_pcs, by = 250)
@@ -65,9 +61,9 @@ dir.create(base_out_dir, showWarnings = FALSE, recursive = TRUE)
 
 set.seed(123)
 
-# ---------------------------------------------------------------------
+
 # MAIN LOOP: iterate over n_pcs values
-# ---------------------------------------------------------------------
+
 
 for (n_pcs in n_pcs_values) {
   
@@ -229,3 +225,249 @@ for (n_pcs in n_pcs_values) {
 
 message("\n========== EXPERIMENT COMPLETE ==========")
 message("Results saved to: ", base_out_dir)
+
+# ---- analysis ---- 
+library(data.table)
+
+
+# LOAD RESULTS
+
+
+base_out_dir <- "results/npc_experiment"
+npc_dirs <- list.dirs(base_out_dir, recursive = FALSE)
+stopifnot(length(npc_dirs) > 0)
+
+# Extract n_pcs values from directory names
+get_npc <- function(d) as.integer(sub("npc_", "", basename(d)))
+npc_values <- sort(sapply(npc_dirs, get_npc))
+message("Found results for n_pcs: ", paste(npc_values, collapse = ", "))
+
+# Load all results into one table
+load_npc_results <- function(n_pcs) {
+  dir_path <- file.path(base_out_dir, paste0("npc_", n_pcs))
+  rds_files <- list.files(dir_path, pattern = "\\.rds$", full.names = TRUE)
+  if (length(rds_files) == 0) return(NULL)
+  
+  all_res <- rbindlist(lapply(rds_files, function(f) {
+    res_list <- readRDS(f)
+    rbindlist(lapply(res_list, function(r) {
+      data.table(
+        Gene = r$Gene,
+        Position = r$Aligned_Position,
+        n_pcs = r$n_pcs,
+        N = r$N,
+        R2_aa = r$R2_aa,
+        R2_pcs = r$R2_pcs,
+        R2_full = r$R2_full,
+        P_aa_only = r$P_aa_only,
+        P_aa_with_pcs = r$P_aa_with_pcs
+      )
+    }))
+  }), fill = TRUE)
+  return(all_res)
+}
+
+results <- rbindlist(lapply(npc_values, load_npc_results))
+stopifnot(nrow(results) > 0)
+
+# Create site ID
+results[, site := paste(Gene, Position, sep = "_")]
+message("Loaded ", nrow(results), " site-npc combinations")
+message("Unique sites: ", uniqueN(results$site))
+
+results <- results[results$n_pcs!=2250]
+
+# ---------------------------------------------------------------------
+# 1. NUMBER OF SIGNIFICANT SITES VS N_PCS
+# ---------------------------------------------------------------------
+
+alpha <- 0.05
+
+# For n_pcs=0, use P_aa_only; otherwise use P_aa_with_pcs
+results[, P_relevant := ifelse(n_pcs == 0, P_aa_only, P_aa_with_pcs)]
+
+sig_counts <- results[, .(
+  n_sig_nominal = sum(P_relevant < alpha, na.rm = TRUE),
+  n_sig_bonf = sum(P_relevant < alpha / .N, na.rm = TRUE),
+  n_total = .N,
+  median_P = median(P_relevant, na.rm = TRUE),
+  median_R2 = median(R2_full, na.rm = TRUE)
+), by = n_pcs][order(n_pcs)]
+
+message("\n=== Significant sites by n_pcs ===")
+print(sig_counts)
+
+# Plot
+pdf("results/npc_experiment/sig_sites_vs_npcs.pdf", width = 10, height = 5)
+par(mfrow = c(1, 2))
+
+plot(sig_counts$n_pcs, sig_counts$n_sig_nominal, type = "b", pch = 19,
+     xlab = "Number of PCs", ylab = "Significant sites (p < 0.05)",
+     main = "Significance vs Number PCs in GWAS")
+abline(h = sig_counts[n_pcs == max(n_pcs), n_sig_nominal], lty = 2, col = "red")
+
+
+plot(sig_counts$n_pcs, sig_counts$n_sig_bonf, type = "b", pch = 19,
+     xlab = "Number of PCs", ylab = "Significant sites (Bonferroni)",
+     main = "Significance vs Number PCs in GWAS")
+abline(h = sig_counts[n_pcs == max(n_pcs), n_sig_bonf], lty = 2, col = "red")
+
+dev.off()
+
+par(mfrow=c(2,1))
+plot(sig_counts$n_pcs, sig_counts$n_sig_bonf, type = "b", pch = 19,
+     xlab = "Number of PCs", ylab = "Significant sites (Bonferroni)",
+     main = "Significance vs Number PCs in GWAS")
+abline(h = sig_counts[n_pcs == max(n_pcs), n_sig_bonf], lty = 2, col = "red")
+barplot(cumsum(pvar)[0:2000], main="Percent Variance Explained By PCs")
+
+# Calculate cumulative variance explained at each n_pcs value
+cumvar <- cumsum(pvar)
+var_at_npc <- sapply(sig_counts$n_pcs, function(x) {
+  if (x == 0) return(0)
+  round(cumvar[x] * 100, 1)
+})
+
+# Plot with annotations
+plot(sig_counts$n_pcs, sig_counts$n_sig_bonf, type = "b", pch = 19,
+     xlab = "Number of PCs", ylab = "Significant sites (Bonferroni)",
+     main = "Significance vs Number PCs in GWAS")
+abline(h = sig_counts[n_pcs == max(n_pcs), n_sig_bonf], lty = 2, col = "red")
+
+# Add variance labels
+text(sig_counts$n_pcs, sig_counts$n_sig_bonf, 
+     labels = paste0(var_at_npc, "%"), 
+     pos = 3, cex = 0.7, col = "blue")
+par(mfrow=c(1,1))
+# ---------------------------------------------------------------------
+# 2. INFLECTION POINT DETECTION
+# ---------------------------------------------------------------------
+
+# Simple approach: find where rate of change slows
+if (nrow(sig_counts) > 2) {
+  delta_sig <- -diff(sig_counts$n_sig_nominal)
+  delta_pcs <- diff(sig_counts$n_pcs)
+  rate <- delta_sig / delta_pcs
+  
+  # Inflection = where rate drops substantially
+  rate_dt <- data.table(
+    n_pcs_from = sig_counts$n_pcs[-nrow(sig_counts)],
+    n_pcs_to = sig_counts$n_pcs[-1],
+    rate_of_decrease = rate
+  )
+  message("\n=== Rate of decrease in significant sites ===")
+  print(rate_dt)
+}
+
+# ---------------------------------------------------------------------
+# 3. STABILITY OF EFFECT ESTIMATES ACROSS N_PCS
+# ---------------------------------------------------------------------
+
+# Wide format for R2_full correlation
+r2_wide <- dcast(results, site ~ n_pcs, value.var = "R2_full")
+r2_mat <- as.matrix(r2_wide[, -1, with = FALSE])
+rownames(r2_mat) <- r2_wide$site
+
+# Pairwise correlations of R2 across n_pcs levels
+r2_cor <- cor(r2_mat, use = "pairwise.complete.obs")
+message("\n=== R2 correlation matrix across n_pcs ===")
+print(round(r2_cor, 3))
+
+library(pheatmap)
+pheatmap(r2_cor)
+
+
+# Same for -log10(P)
+results[, neglogP := -log10(P_relevant + 1e-300)]
+p_wide <- dcast(results, site ~ n_pcs, value.var = "neglogP")
+p_mat <- as.matrix(p_wide[, -1, with = FALSE])
+p_cor <- cor(p_mat, use = "pairwise.complete.obs")
+message("\n=== -log10(P) correlation matrix across n_pcs ===")
+print(round(p_cor, 3))
+pheatmap(p_cor, main = "Correlation between -log10p across num PCs controlled for")
+
+# ---------------------------------------------------------------------
+# 4. SITE-LEVEL STABILITY: CORRELATION WITH MAX N_PCS
+# ---------------------------------------------------------------------
+npc_values <- npc_values[1:9]
+max_npc <- max(npc_values)
+ref_col <- as.character(max_npc)
+
+stability_vs_max <- data.table(
+  n_pcs = npc_values,
+  r2_cor_with_max = sapply(as.character(npc_values), function(x) cor(r2_mat[, x], r2_mat[, ref_col], use = "complete.obs")),
+  neglogP_cor_with_max = sapply(as.character(npc_values), function(x) cor(p_mat[, x], p_mat[, ref_col], use = "complete.obs"))
+)
+message("\n=== Correlation with max n_pcs (", max_npc, ") ===")
+print(stability_vs_max)
+
+pdf("results/npc_experiment/stability_vs_npcs.pdf", width = 10, height = 5)
+par(mfrow = c(1, 2))
+
+plot(stability_vs_max$n_pcs, stability_vs_max$r2_cor_with_max, type = "b", pch = 19,
+     xlab = "Number of PCs", ylab = paste0("Correlation with n_pcs=", max_npc),
+     main = "R² stability", ylim = c(0, 1))
+
+plot(stability_vs_max$n_pcs, stability_vs_max$neglogP_cor_with_max, type = "b", pch = 19,
+     xlab = "Number of PCs", ylab = paste0("Correlation with n_pcs=", max_npc),
+     main = "-log10(P) stability", ylim = c(0, 1))
+
+dev.off()
+
+# ---------------------------------------------------------------------
+# 5. IDENTIFY CONSISTENTLY SIGNIFICANT SITES
+# ---------------------------------------------------------------------
+
+# Sites significant at all n_pcs >= some threshold
+min_npc_stable <- 500  # adjust as needed
+high_npc <- npc_values[npc_values >= min_npc_stable]
+
+consistent_sig <- results[n_pcs %in% high_npc, .(
+  n_sig = sum(P_relevant < alpha, na.rm = TRUE),
+  n_tested = .N,
+  mean_R2 = mean(R2_full, na.rm = TRUE)
+), by = site]
+
+consistent_sig[, prop_sig := n_sig / n_tested]
+consistent_sites <- consistent_sig[prop_sig == 1][order(-mean_R2)]
+
+message("\n=== Sites significant across all n_pcs >= ", min_npc_stable, " ===")
+message("N = ", nrow(consistent_sites))
+if (nrow(consistent_sites) > 0) {
+  print(head(consistent_sites, 20))
+}
+
+
+
+# Sites significant at ALL n_pcs levels (0 through 2000)
+all_npc <- unique(results$n_pcs)
+
+consistent_all <- results[, .(
+  n_sig = sum(P_relevant < alpha, na.rm = TRUE),
+  n_tested = .N
+), by = site]
+
+consistent_all[, prop_sig := n_sig / n_tested]
+always_sig <- consistent_all[prop_sig == 1][order(-n_sig)]
+
+message("Sites significant at ALL ", length(all_npc), " n_pcs levels: ", nrow(always_sig))
+print(always_sig)
+
+# SAVE SUMMARY
+
+
+
+
+
+
+saveRDS(list(
+  sig_counts = sig_counts,
+  r2_correlation = r2_cor,
+  p_correlation = p_cor,
+  stability_vs_max = stability_vs_max,
+  consistent_sites = consistent_sites
+), file.path(base_out_dir, "analysis_summary.rds"))
+
+message("\n=== Analysis complete ===")
+message("PDFs saved to: ", base_out_dir)
+

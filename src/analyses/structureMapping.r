@@ -4,6 +4,20 @@
 library(bio3d)
 library(data.table)
 
+download.file(
+  "https://files.rcsb.org/download/1RCX.cif",
+  "1RCX.cif",
+  method = "libcurl"
+)
+pdb_1rcx <- read.pdb("1RCX.cif")
+
+pdb_1rcx <- read.pdb("1RCX", type = "cif")
+
+options(download.file.method = "libcurl")
+library(bio3d)
+pdb_1rcx <- read.pdb("1RCX")
+
+
 # Download Arabidopsis Rubisco (1.5 Å resolution)
 pdb <- read.pdb("5IU0")
 

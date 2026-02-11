@@ -3,6 +3,7 @@ library(data.table)
 
 embeds <- read_parquet("data/all_gene_embeddings.parquet")
 
+
 embed_cols <- grep("embe", colnames(embeds))
 
 #pca <- prcomp(embeds[,embed_cols])

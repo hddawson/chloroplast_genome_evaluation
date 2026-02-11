@@ -1,0 +1,14 @@
+Here I argue for genomic selection on the basis of the chloroplast genome. 
+
+Plants generally struggle to grow in the cold. This affects planting seasons for many crops, and challenges yield, food security, and agricultural efficiency. A key component of cold stress in plants is photosynthetic. Thermodependent carbon sink processes slow while light continues to irradiate photosynthetic machinery. The chloroplast electron transport chain becomes overreduced and produces reactive oxygen species. The extent of this stress is such that a plant may inhibit photosynthesis under cold, unable to grow despite abundant light. 
+The evolutionary history of the chloroplast offers a potential explanation for the mismatch between photosynthesis and the cold. According to the endosymbiotic theory, the chloroplast’s likely ancestor was a cyanobacterium that lived in the ocean ~1.5 billion years ago. The environment at that time was aquatic, likely warm, and slightly dimmer - a contrast to the dry, cold, bright conditions common in cold stress. The conservation of the chloroplast genome from angiosperms to algae suggests that the general mechanism of photosynthesis is retained from an ancestral state likely optimized for warm conditions. 
+Despite strong functional constraints on variation, and a limited pool of processes that drive genomic variation, chloroplast-encoded proteins display variation across the plant kingdom. To what degree, if any, is this variation associated with plant growth temperature? 
+This question is motivated by reports linking plastid genetic variation to temperature-dependent phenotypes and adaptive evolution in plastid genomes, and more broadly by the universal temperature dependence of enzymatic reaction rates, evidence for protein and proteome-level thermal adaptation in bacteria, and the well-documented sensitivity of the photosynthetic apparatus to cold stress.
+Here we test the hypothesis that variation in chloroplast-encoded proteins is associated with temperature. Previous chloroplast genomic research focuses on phylogeny resolution and population genomic models of adaptive evolution, with a particular focus on rubisco. Here we analyze a general set of proteins spanning multiple complexes and pathways, and do so specifically with regards to plant growth temperature as estimated from occurrence records and climate models. 
+We detected a significant convergent association, characterized by hydrophobicity changes and conservative substitutions localized near protein active sites, consistent with bacterial temperature adaptation and evolution under high functional constraint. This research offers a plastome-temperature genotype-phenotype map to guide engineering efforts, and the basis of a genomic prediction and selection tool to increase abiotic stress tolerance in plant breeding programs. 
+
+Meth
+
+
+
+

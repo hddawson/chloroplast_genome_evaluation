@@ -25,7 +25,7 @@ test_df <- df[ID %in% poaceae_ids]
 
 ### --- Variable selection on TRAINING data only ---
 setDT(train_embeds)
-pheno_col <- "pheno_wc2.1_2.5m_bio_13_p50"
+pheno_col <- "pheno_wc2.1_2.5m_bio_8_p50"
 n_top <- 1  # Fixed at 1
 genes <- unique(train_embeds$Gene)
 
