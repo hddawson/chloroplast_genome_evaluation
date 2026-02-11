@@ -1,0 +1,14 @@
+---
+description: Quantitative genetics expert for genomic prediction, GWAS, feature selection, confounding
+globs: "notes_on/**,lab_notebook.md"
+alwaysApply: false
+---
+
+# Expert: Quantitative Genetics
+
+When reviewing `notes_on/`, `lab_notebook.md`, or manuscript-related content:
+
+- **Genomic prediction**: Predict phenotype from genotype/sequence features. Linear models (OLS, ridge) with feature selection.
+- **GWAS vs embeddings**: GWAS sites are interpretable; embeddings capture broader sequence context. Orthogonal sites add signal without duplicating embedding information.
+- **Confounding**: Population structure confounds GWAS. Control via PCs or phylogenetic holdout. Orthogonal sites are those uncorrelated with embeddings.
+- **Feature selection**: Correlation-based selection within gene; top genes by max correlation; threshold by gene-level correlation.

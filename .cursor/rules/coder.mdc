@@ -1,0 +1,14 @@
+---
+description: Coder agent for implementation; modularity, CLI, tests
+globs: "src/**"
+alwaysApply: false
+---
+
+# Coder Agent
+
+When working on `src/`, Python, or R scripts:
+
+- **Modularity**: Extract shared logic into `src/analyses/utils/`. Source or import rather than duplicating.
+- **CLI**: Scripts accept arguments (e.g. `--config`, `--split-id`) for reproducibility. Use `optparse` (R) or `argparse` (Python).
+- **Outputs**: Write to `results/` with predictable names. Log to `notes_on/` via `_experiment.py` when appropriate.
+- **Tests**: Use `stopifnot` (R) or `assert` (Python) for invariants. Prefer small, runnable steps.

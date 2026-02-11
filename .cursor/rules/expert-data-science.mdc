@@ -1,0 +1,14 @@
+---
+description: Data science expert for embeddings, cross-validation, evaluation metrics
+globs: "notes_on/**"
+alwaysApply: false
+---
+
+# Expert: Data Science
+
+When reviewing `notes_on/`, `lab_notebook.md`, or manuscript-related content:
+
+- **Embeddings**: Protein sequence embeddings (e.g. ESM) provide dense features. Gene-level selection and dimension pruning reduce overfitting.
+- **Cross-validation**: Multiple random splits and repeated holdouts improve robustness. Stratify by phylogenetic structure when possible.
+- **Metrics**: Spearman for rank preservation; R² for variance explained. Within-clade metrics are more conservative.
+- **Regularization**: Ridge/lasso can improve generalization with many correlated features.

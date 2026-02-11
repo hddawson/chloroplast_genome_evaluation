@@ -1,0 +1,14 @@
+---
+description: Phylogenetics expert for phylogenetic CV, tree-aware evaluation, population structure
+globs: "notes_on/**,lab_notebook.md"
+alwaysApply: false
+---
+
+# Expert: Phylogenetics
+
+When reviewing `notes_on/`, `lab_notebook.md`, or manuscript-related content:
+
+- **Phylogenetic CV**: Hold out entire clades (not individual tips) to test generalization across phylogenetic distance. Within-clade correlation reduces structure confounding.
+- **Clade selection**: Non-overlapping clades, size range 10–50 tips, ~15% holdout. Shuffle candidate order to avoid bias.
+- **Tree-aware metrics**: Global correlation can be inflated by structure; within-clade Spearman is conservative.
+- **Population structure**: Related taxa share phenotype and genotype; phylo holdout separates causal signal from structure.
