@@ -57,20 +57,35 @@ if key in hashes and hashes[key] == script_hash and not force:
 # ── run the script ───────────────────────────────────────────────────────────
 
 print(f"▶ Running: {interpreter} {script_path}")
-result = subprocess.run(
-    [interpreter, str(script_path)],
-    capture_output=True,
+
+# Force line-buffered/unbuffered output from child processes
+env = os.environ.copy()
+env["PYTHONUNBUFFERED"] = "1"  # for python scripts
+
+# Use stdbuf to force line-buffering if available (helps R, etc.)
+import shutil
+cmd = [interpreter, str(script_path)]
+if shutil.which("stdbuf") and interpreter != "python":
+    cmd = ["stdbuf", "-oL", "-eL"] + cmd
+
+proc = subprocess.Popen(
+    cmd,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.STDOUT,  # merge stderr into stdout so we see everything live
     text=True,
+    env=env,
 )
 
-output = result.stdout
-if result.stderr:
-    output += "\n--- stderr ---\n" + result.stderr
+output_lines = []
+for line in proc.stdout:
+    print(line, end="", flush=True)
+    output_lines.append(line)
+proc.wait()
 
-print(output)
+output = "".join(output_lines)
 
-if result.returncode != 0:
-    print(f"⚠ Script exited with code {result.returncode}", file=sys.stderr)
+if proc.returncode != 0:
+    print(f"⚠ Script exited with code {proc.returncode}", file=sys.stderr)
 
 # ── call Claude API for summary ─────────────────────────────────────────────
 

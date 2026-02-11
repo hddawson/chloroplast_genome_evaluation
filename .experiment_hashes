@@ -3,5 +3,7 @@
   "generate_repo_map.py": "77b98c3968a1291fec082b1ebcbd8b89189e7ffd4b028f88ba3c4b2f9a57a07d",
   "src/analyses/genomic_prediction_phylogenetic_cv.r": "9560d3a9409944923ad4215a6d511a88ee6e25fd40a9b29938ff37284b2010a2",
   "src/analyses/genomic_prediction_phylo_cv_results_vis.r": "3d34955b392a5ed7724df940359b048aed0d941cf0e18c3131499150e2e92607",
-  "src/analyses/genomic_prediction_cv_grid.r": "88037e3a1056c5781337c36b3bc45e49c62b06620fa96b4217c3381bb110199a"
+  "src/analyses/genomic_prediction_cv_grid.r": "88037e3a1056c5781337c36b3bc45e49c62b06620fa96b4217c3381bb110199a",
+  "src/analyses/correlate_gwas_with_embeddings.r": "fcbef34623211d042d3630a993b44ff15e3d86bdfae3fefd73032f39af75a264",
+  "src/analyses/genomic_prediction_with_embed_and_sites.r": "663fafc99435cfc5cb35e0899b7fe3be92a38da26d6a14856137df43e5fac31c"
 }
